@@ -110,7 +110,7 @@ export function InventoryScreen() {
           return (
             <button
               key={it.id}
-              onClick={() => navigate("item-edit", { itemId: it.id })}
+              onClick={() => navigate("item-detail", { itemId: it.id })}
               className={`w-full bg-white rounded-xl p-3 shadow-sm border flex items-center gap-3 active:scale-[0.98] transition text-left ${
                 low ? "border-rose-200 bg-rose-50/30" : "border-slate-100"
               }`}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useApp, fmtRs } from "@/lib/store";
+import { useApp } from "@/lib/store";
 import { ScreenId } from "@/lib/types";
 
 interface HeaderConfig {
@@ -16,6 +16,8 @@ const CONFIG: Record<string, HeaderConfig> = {
   inventory: { title: "📦 Inventory", subtitle: "Stock list & items" },
   "item-add": { title: "➕ Add Item", showBack: true },
   "item-edit": { title: "✏️ Edit Item", showBack: true },
+  "item-detail": { title: "📦 Item Detail", showBack: true },
+  "stock-adjust": { title: "⚖️ Stock Adjustment", showBack: true },
   "sale-new": { title: "🧾 New Sale Bill", subtitle: "Quick billing" },
   "bill-history": { title: "📜 Bill History", showBack: true },
   "purchase-new": { title: "🚚 Record Purchase", showBack: true },
@@ -36,6 +38,8 @@ export function TopBar() {
   const goBack = useApp((s) => s.goBack);
   const pendingSync = useApp((s) => s.pendingSyncCount());
   const pushSync = useApp((s) => s.pushSync);
+  const isOnline = useApp((s) => s.isOnline);
+  const setOnline = useApp((s) => s.setOnline);
 
   const cfg = CONFIG[screen] || CONFIG.dashboard;
 
@@ -66,19 +70,33 @@ export function TopBar() {
             )}
           </div>
         </div>
-        {cfg.showSync !== false && (
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Online toggle (per resolution #1) — toggles offline-first behaviour */}
           <button
-            onClick={pendingSync > 0 ? pushSync : undefined}
-            disabled={pendingSync === 0}
-            className={`shrink-0 text-[11px] font-bold px-2.5 py-1.5 rounded-full transition active:scale-95 ${
-              pendingSync > 0
-                ? "bg-amber-400 text-amber-950 hover:bg-amber-300"
-                : "bg-white/15 text-white"
+            onClick={() => setOnline(!isOnline)}
+            className={`text-[10px] font-bold px-2 py-1.5 rounded-full transition active:scale-95 ${
+              isOnline
+                ? "bg-emerald-400/30 text-emerald-100 hover:bg-emerald-400/40"
+                : "bg-rose-400/30 text-rose-100 hover:bg-rose-400/40"
             }`}
+            title="Toggle network"
           >
-            {pendingSync > 0 ? `☁ ${pendingSync} Pending` : "✓ Synced"}
+            {isOnline ? "🌐 Online" : "📵 Offline"}
           </button>
-        )}
+          {cfg.showSync !== false && (
+            <button
+              onClick={pendingSync > 0 ? pushSync : undefined}
+              disabled={pendingSync === 0}
+              className={`text-[11px] font-bold px-2.5 py-1.5 rounded-full transition active:scale-95 ${
+                pendingSync > 0
+                  ? "bg-amber-400 text-amber-950 hover:bg-amber-300"
+                  : "bg-white/15 text-white"
+              }`}
+            >
+              {pendingSync > 0 ? `☁ ${pendingSync} Pending` : "✓ Synced"}
+            </button>
+          )}
+        </div>
       </div>
     </header>
   );

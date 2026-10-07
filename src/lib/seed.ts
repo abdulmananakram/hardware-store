@@ -1,6 +1,7 @@
 import {
   Category,
   Item,
+  ItemUnit,
   Customer,
   Supplier,
   SaleBill,
@@ -9,10 +10,14 @@ import {
   AppNotification,
   RateHistoryEntry,
   AiImportSession,
+  ShopConfig,
+  StockAdjustment,
 } from "./types";
 
 // ============================================================
 // Seed data — represents a small hardware shop's first state
+// Schema compliant: top-level tables have shop_id + created_at + updated_at
+//                  child tables have only created_at
 // ============================================================
 
 const now = () => new Date().toISOString();
@@ -21,247 +26,202 @@ const daysAgo = (n: number) =>
 const hoursAgo = (n: number) =>
   new Date(Date.now() - n * 60 * 60 * 1000).toISOString();
 
+// Per resolution #7: configurable shop settings
+export const seedShopConfig: ShopConfig = {
+  shopId: 1,
+  shopName: "Hardware Shop",
+  itemDeletionWindowDays: 90,
+  lowStockThresholdDefault: 10,
+  baseUnitDefault: "Piece",
+  khataReminderThresholdDays: 7,
+  khataReminderThresholdAmount: 1000,
+};
+
 export const seedCategories: Category[] = [
-  { id: 1, shopId: 1, name: "Nails", urduName: "کیل", icon: "📍", parentCategoryId: null },
-  { id: 2, shopId: 1, name: "Screws", urduName: "پیچ", icon: "🪛", parentCategoryId: null },
-  { id: 3, shopId: 1, name: "Locks", urduName: "تالے", icon: "🔒", parentCategoryId: null },
-  { id: 4, shopId: 1, name: "Hinges", urduName: "قبضے", icon: "🚪", parentCategoryId: null },
-  { id: 5, shopId: 1, name: "Bolts", urduName: "بولٹ", icon: "⚙️", parentCategoryId: null },
-  { id: 6, shopId: 1, name: "Nuts", urduName: "نٹ", icon: "🔩", parentCategoryId: null },
-  { id: 7, shopId: 1, name: "Tools", urduName: "اوزار", icon: "🛠️", parentCategoryId: null },
-  { id: 8, shopId: 1, name: "Paint", urduName: "رنگ", icon: "🎨", parentCategoryId: null },
+  { id: 1, shopId: 1, name: "Nails", urduName: "کیل", icon: "📍", parentCategoryId: null, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
+  { id: 2, shopId: 1, name: "Screws", urduName: "پیچ", icon: "🪛", parentCategoryId: null, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
+  { id: 3, shopId: 1, name: "Locks", urduName: "تالے", icon: "🔒", parentCategoryId: null, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
+  { id: 4, shopId: 1, name: "Hinges", urduName: "قبضے", icon: "🚪", parentCategoryId: null, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
+  { id: 5, shopId: 1, name: "Bolts", urduName: "بولٹ", icon: "⚙️", parentCategoryId: null, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
+  { id: 6, shopId: 1, name: "Nuts", urduName: "نٹ", icon: "🔩", parentCategoryId: null, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
+  { id: 7, shopId: 1, name: "Tools", urduName: "اوزار", icon: "🛠️", parentCategoryId: null, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
+  { id: 8, shopId: 1, name: "Paint", urduName: "رنگ", icon: "🎨", parentCategoryId: null, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
 ];
 
 let unitIdCounter = 1000;
-const makeUnits = (baseName: string, extras: { name: string; conv: number }[] = []) => {
+const makeUnits = (baseName: string, extras: { name: string; conv: number }[] = []): ItemUnit[] => {
+  const ts = daysAgo(60);
   const units = [
-    { id: unitIdCounter++, unitName: baseName, conversionToBase: 1, isBaseUnit: true },
+    { id: unitIdCounter++, itemId: 0, unitName: baseName, conversionToBase: 1, isBaseUnit: true, createdAt: ts },
     ...extras.map((e) => ({
       id: unitIdCounter++,
+      itemId: 0,
       unitName: e.name,
       conversionToBase: e.conv,
       isBaseUnit: false,
+      createdAt: ts,
     })),
   ];
   return units;
 };
 
+// Item factory — adds initialQtyInBaseUnit (per resolution #2)
+const item = (
+  id: number, categoryId: number, name: string, urduName: string, icon: string,
+  baseUnitName: string, qtyInBaseUnit: number, initialQtyInBaseUnit: number,
+  pricePerBaseUnit: number, costPerBaseUnit: number, lowStockThreshold: number,
+  extras: { name: string; conv: number }[] = []
+): Item => ({
+  id, shopId: 1, categoryId, name, urduName, icon,
+  baseUnitName, qtyInBaseUnit, initialQtyInBaseUnit,
+  pricePerBaseUnit, costPerBaseUnit, lowStockThreshold,
+  isActive: true,
+  units: makeUnits(baseUnitName, extras).map(u => ({ ...u, itemId: id })),
+  createdAt: daysAgo(60), updatedAt: daysAgo(1),
+});
+
 export const seedItems: Item[] = [
-  // Nails
-  {
-    id: 1, shopId: 1, categoryId: 1, name: "Steel Nail", urduName: "اسٹیل کیل", icon: "📍",
-    baseUnitName: "Piece", qtyInBaseUnit: 350, pricePerBaseUnit: 5, costPerBaseUnit: 3,
-    lowStockThreshold: 100, isActive: true,
-    units: makeUnits("Piece", [{ name: "Box", conv: 12 }, { name: "Kg", conv: 50 }]),
-  },
-  {
-    id: 2, shopId: 1, categoryId: 1, name: "Wall Nail", urduName: "دیوار کیل", icon: "📍",
-    baseUnitName: "Piece", qtyInBaseUnit: 60, pricePerBaseUnit: 3, costPerBaseUnit: 1.5,
-    lowStockThreshold: 80, isActive: true,
-    units: makeUnits("Piece", [{ name: "Box", conv: 25 }]),
-  },
-  {
-    id: 3, shopId: 1, categoryId: 1, name: "Concrete Nail", urduName: "کنکریٹ کیل", icon: "📍",
-    baseUnitName: "Piece", qtyInBaseUnit: 200, pricePerBaseUnit: 4, costPerBaseUnit: 2,
-    lowStockThreshold: 50, isActive: true,
-    units: makeUnits("Piece", [{ name: "Box", conv: 20 }]),
-  },
-  // Screws
-  {
-    id: 4, shopId: 1, categoryId: 2, name: "Wood Screw", urduName: "لکڑی پیچ", icon: "🪛",
-    baseUnitName: "Piece", qtyInBaseUnit: 180, pricePerBaseUnit: 6, costPerBaseUnit: 3.5,
-    lowStockThreshold: 60, isActive: true,
-    units: makeUnits("Piece", [{ name: "Box", conv: 20 }]),
-  },
-  {
-    id: 5, shopId: 1, categoryId: 2, name: "Wall Screw", urduName: "دیوار پیچ", icon: "🪛",
-    baseUnitName: "Piece", qtyInBaseUnit: 45, pricePerBaseUnit: 8, costPerBaseUnit: 4,
-    lowStockThreshold: 50, isActive: true,
-    units: makeUnits("Piece", [{ name: "Box", conv: 15 }]),
-  },
-  // Locks
-  {
-    id: 6, shopId: 1, categoryId: 3, name: "Door Lock 60mm", urduName: "دروازہ تالا", icon: "🔒",
-    baseUnitName: "Piece", qtyInBaseUnit: 25, pricePerBaseUnit: 350, costPerBaseUnit: 220,
-    lowStockThreshold: 10, isActive: true,
-    units: makeUnits("Piece"),
-  },
-  {
-    id: 7, shopId: 1, categoryId: 3, name: "Padlock 50mm", urduName: "پیڈلاک", icon: "🔒",
-    baseUnitName: "Piece", qtyInBaseUnit: 18, pricePerBaseUnit: 280, costPerBaseUnit: 180,
-    lowStockThreshold: 8, isActive: true,
-    units: makeUnits("Piece"),
-  },
-  {
-    id: 8, shopId: 1, categoryId: 3, name: "Cabinet Lock", urduName: "الमاری تالا", icon: "🔒",
-    baseUnitName: "Piece", qtyInBaseUnit: 5, pricePerBaseUnit: 180, costPerBaseUnit: 120,
-    lowStockThreshold: 6, isActive: true,
-    units: makeUnits("Piece"),
-  },
-  // Hinges
-  {
-    id: 9, shopId: 1, categoryId: 4, name: "Door Hinge 4in", urduName: "دروازہ قبضہ", icon: "🚪",
-    baseUnitName: "Pair", qtyInBaseUnit: 40, pricePerBaseUnit: 95, costPerBaseUnit: 60,
-    lowStockThreshold: 15, isActive: true,
-    units: makeUnits("Pair", [{ name: "Dozen", conv: 12 }]),
-  },
-  {
-    id: 10, shopId: 1, categoryId: 4, name: "Cabinet Hinge 2in", urduName: "الماری قبضہ", icon: "🚪",
-    baseUnitName: "Pair", qtyInBaseUnit: 120, pricePerBaseUnit: 35, costPerBaseUnit: 22,
-    lowStockThreshold: 30, isActive: true,
-    units: makeUnits("Pair", [{ name: "Dozen", conv: 12 }]),
-  },
-  // Bolts
-  {
-    id: 11, shopId: 1, categoryId: 5, name: "M8 Bolt", urduName: "ایم 8 بولٹ", icon: "⚙️",
-    baseUnitName: "Piece", qtyInBaseUnit: 280, pricePerBaseUnit: 12, costPerBaseUnit: 7,
-    lowStockThreshold: 100, isActive: true,
-    units: makeUnits("Piece", [{ name: "Box", conv: 50 }]),
-  },
-  {
-    id: 12, shopId: 1, categoryId: 5, name: "M10 Bolt", urduName: "ایم 10 بولٹ", icon: "⚙️",
-    baseUnitName: "Piece", qtyInBaseUnit: 75, pricePerBaseUnit: 18, costPerBaseUnit: 10,
-    lowStockThreshold: 80, isActive: true,
-    units: makeUnits("Piece", [{ name: "Box", conv: 50 }]),
-  },
-  // Nuts
-  {
-    id: 13, shopId: 1, categoryId: 6, name: "M8 Nut", urduName: "ایم 8 نٹ", icon: "🔩",
-    baseUnitName: "Piece", qtyInBaseUnit: 500, pricePerBaseUnit: 4, costPerBaseUnit: 2,
-    lowStockThreshold: 150, isActive: true,
-    units: makeUnits("Piece", [{ name: "Box", conv: 100 }]),
-  },
-  {
-    id: 14, shopId: 1, categoryId: 6, name: "M10 Lock Nut", urduName: "ایم 10 لاک نٹ", icon: "🔩",
-    baseUnitName: "Piece", qtyInBaseUnit: 320, pricePerBaseUnit: 6, costPerBaseUnit: 3,
-    lowStockThreshold: 100, isActive: true,
-    units: makeUnits("Piece", [{ name: "Box", conv: 100 }]),
-  },
-  // Tools
-  {
-    id: 15, shopId: 1, categoryId: 7, name: "Hammer", urduName: "ہتھوڑا", icon: "🛠️",
-    baseUnitName: "Piece", qtyInBaseUnit: 12, pricePerBaseUnit: 450, costPerBaseUnit: 320,
-    lowStockThreshold: 5, isActive: true,
-    units: makeUnits("Piece"),
-  },
-  {
-    id: 16, shopId: 1, categoryId: 7, name: "Screwdriver Set", urduName: "اسکرو ڈرائیور", icon: "🛠️",
-    baseUnitName: "Set", qtyInBaseUnit: 8, pricePerBaseUnit: 600, costPerBaseUnit: 420,
-    lowStockThreshold: 4, isActive: true,
-    units: makeUnits("Set"),
-  },
-  // Paint
-  {
-    id: 17, shopId: 1, categoryId: 8, name: "White Paint 4L", urduName: "سفید رنگ", icon: "🎨",
-    baseUnitName: "Tin", qtyInBaseUnit: 20, pricePerBaseUnit: 1200, costPerBaseUnit: 920,
-    lowStockThreshold: 8, isActive: true,
-    units: makeUnits("Tin"),
-  },
-  {
-    id: 18, shopId: 1, categoryId: 8, name: "Primer 1L", urduName: "پرائمری", icon: "🎨",
-    baseUnitName: "Tin", qtyInBaseUnit: 14, pricePerBaseUnit: 480, costPerBaseUnit: 320,
-    lowStockThreshold: 6, isActive: true,
-    units: makeUnits("Tin"),
-  },
+  item(1, 1, "Steel Nail", "اسٹیل کیل", "📍", "Piece", 350, 400, 5, 3, 100, [{ name: "Box", conv: 12 }, { name: "Kg", conv: 50 }]),
+  item(2, 1, "Wall Nail", "دیوار کیل", "📍", "Piece", 60, 100, 3, 1.5, 80, [{ name: "Box", conv: 25 }]),
+  item(3, 1, "Concrete Nail", "کنکریٹ کیل", "📍", "Piece", 200, 200, 4, 2, 50, [{ name: "Box", conv: 20 }]),
+  item(4, 2, "Wood Screw", "لکڑی پیچ", "🪛", "Piece", 180, 200, 6, 3.5, 60, [{ name: "Box", conv: 20 }]),
+  item(5, 2, "Wall Screw", "دیوار پیچ", "🪛", "Piece", 45, 100, 8, 4, 50, [{ name: "Box", conv: 15 }]),
+  item(6, 3, "Door Lock 60mm", "دروازہ تالا", "🔒", "Piece", 25, 30, 350, 220, 10),
+  item(7, 3, "Padlock 50mm", "پیڈلاک", "🔒", "Piece", 18, 25, 280, 180, 8),
+  item(8, 3, "Cabinet Lock", "الاماری تالا", "🔒", "Piece", 5, 15, 180, 120, 6),
+  item(9, 4, "Door Hinge 4in", "دروازہ قبضہ", "🚪", "Pair", 40, 60, 95, 60, 15, [{ name: "Dozen", conv: 12 }]),
+  item(10, 4, "Cabinet Hinge 2in", "الماری قبضہ", "🚪", "Pair", 120, 144, 35, 22, 30, [{ name: "Dozen", conv: 12 }]),
+  item(11, 5, "M8 Bolt", "ایم 8 بولٹ", "⚙️", "Piece", 280, 350, 12, 7, 100, [{ name: "Box", conv: 50 }]),
+  item(12, 5, "M10 Bolt", "ایم 10 بولٹ", "⚙️", "Piece", 75, 150, 18, 10, 80, [{ name: "Box", conv: 50 }]),
+  item(13, 6, "M8 Nut", "ایم 8 نٹ", "🔩", "Piece", 500, 600, 4, 2, 150, [{ name: "Box", conv: 100 }]),
+  item(14, 6, "M10 Lock Nut", "ایم 10 لاک نٹ", "🔩", "Piece", 320, 400, 6, 3, 100, [{ name: "Box", conv: 100 }]),
+  item(15, 7, "Hammer", "ہتھوڑا", "🛠️", "Piece", 12, 15, 450, 320, 5),
+  item(16, 7, "Screwdriver Set", "اسکرو ڈرائیور", "🛠️", "Set", 8, 10, 600, 420, 4),
+  item(17, 8, "White Paint 4L", "سفید رنگ", "🎨", "Tin", 20, 25, 1200, 920, 8),
+  item(18, 8, "Primer 1L", "پرائمری", "🎨", "Tin", 14, 20, 480, 320, 6),
 ];
 
 export const seedCustomers: Customer[] = [
-  { id: 1, shopId: 1, name: "Walk-in Customer", phone: undefined, khataBalance: 0, createdAt: daysAgo(60) },
-  { id: 2, shopId: 1, name: "Rashid Khan", phone: "0301-2345678", khataBalance: 2400, createdAt: daysAgo(45) },
-  { id: 3, shopId: 1, name: "Imran Construction", phone: "0321-9876543", khataBalance: 8750, createdAt: daysAgo(30) },
-  { id: 4, shopId: 1, name: "Bilal Ahmad", phone: "0333-1122334", khataBalance: 0, createdAt: daysAgo(20) },
-  { id: 5, shopId: 1, name: "Salim Builder", phone: "0345-5566778", khataBalance: 5300, createdAt: daysAgo(15) },
+  { id: 1, shopId: 1, name: "Walk-in Customer", phone: undefined, khataBalance: 0, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
+  { id: 2, shopId: 1, name: "Rashid Khan", phone: "0301-2345678", khataBalance: 2400, createdAt: daysAgo(45), updatedAt: hoursAgo(2) },
+  { id: 3, shopId: 1, name: "Imran Construction", phone: "0321-9876543", khataBalance: 8750, createdAt: daysAgo(30), updatedAt: daysAgo(12) },
+  { id: 4, shopId: 1, name: "Bilal Ahmad", phone: "0333-1122334", khataBalance: 0, createdAt: daysAgo(20), updatedAt: daysAgo(20) },
+  { id: 5, shopId: 1, name: "Salim Builder", phone: "0345-5566778", khataBalance: 5300, createdAt: daysAgo(15), updatedAt: daysAgo(1) },
 ];
 
 export const seedSuppliers: Supplier[] = [
-  { id: 1, shopId: 1, name: "Pak Steel Traders", phone: "042-111-222", payableBalance: 12500, createdAt: daysAgo(60) },
-  { id: 2, shopId: 1, name: "Lahore Hardware Co.", phone: "042-333-444", payableBalance: 0, createdAt: daysAgo(40) },
-  { id: 3, shopId: 1, name: "Fastener World", phone: "042-555-666", payableBalance: 4800, createdAt: daysAgo(25) },
+  { id: 1, shopId: 1, name: "Pak Steel Traders", phone: "042-111-222", payableBalance: 12500, createdAt: daysAgo(60), updatedAt: daysAgo(7) },
+  { id: 2, shopId: 1, name: "Lahore Hardware Co.", phone: "042-333-444", payableBalance: 0, createdAt: daysAgo(40), updatedAt: daysAgo(40) },
+  { id: 3, shopId: 1, name: "Fastener World", phone: "042-555-666", payableBalance: 4800, createdAt: daysAgo(25), updatedAt: daysAgo(3) },
 ];
 
-// Sale bills: a few recent ones, some pending sync, some cash, some udhaar
+// Helper to generate UUID (client-side, per resolution #1)
+const uuid = () =>
+  "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+
+// Sale bills: a few recent ones, some pending sync (offline-created)
+// All bills have client-generated UUID for idempotency (per resolution #1)
 export const seedSaleBills: SaleBill[] = [
   {
-    id: 1, shopId: 1, customerId: 2, billDate: hoursAgo(2), paymentType: "udhaar",
-    totalAmount: 1240, syncStatus: "synced",
+    id: 1, uuid: "sale-0001-aaaa-bbbb-cccc0001", shopId: 1, customerId: 2, billDate: hoursAgo(2),
+    paymentType: "udhaar", totalAmount: 1240, syncStatus: "synced",
+    createdAt: hoursAgo(2), updatedAt: hoursAgo(2),
     lines: [
-      { id: 1, saleBillId: 1, itemId: 1, unitId: 1000, qtyInSoldUnit: 40, qtyInBaseUnit: 40, unitPriceAtSale: 5, lineTotal: 200 },
-      { id: 2, saleBillId: 1, itemId: 11, unitId: 1018, qtyInSoldUnit: 20, qtyInBaseUnit: 20, unitPriceAtSale: 12, lineTotal: 240 },
-      { id: 3, saleBillId: 1, itemId: 4, unitId: 1007, qtyInSoldUnit: 30, qtyInBaseUnit: 30, unitPriceAtSale: 6, lineTotal: 180 },
-      { id: 4, saleBillId: 1, itemId: 13, unitId: 1022, qtyInSoldUnit: 50, qtyInBaseUnit: 50, unitPriceAtSale: 4, lineTotal: 200 },
-      { id: 5, saleBillId: 1, itemId: 9, unitId: 1014, qtyInSoldUnit: 4, qtyInBaseUnit: 4, unitPriceAtSale: 95, lineTotal: 380 },
+      { id: 1, saleBillId: 1, itemId: 1, unitId: 1000, qtyInSoldUnit: 40, qtyInBaseUnit: 40, unitPriceAtSale: 5, lineTotal: 200, createdAt: hoursAgo(2) },
+      { id: 2, saleBillId: 1, itemId: 11, unitId: 1018, qtyInSoldUnit: 20, qtyInBaseUnit: 20, unitPriceAtSale: 12, lineTotal: 240, createdAt: hoursAgo(2) },
+      { id: 3, saleBillId: 1, itemId: 4, unitId: 1007, qtyInSoldUnit: 30, qtyInBaseUnit: 30, unitPriceAtSale: 6, lineTotal: 180, createdAt: hoursAgo(2) },
+      { id: 4, saleBillId: 1, itemId: 13, unitId: 1022, qtyInSoldUnit: 50, qtyInBaseUnit: 50, unitPriceAtSale: 4, lineTotal: 200, createdAt: hoursAgo(2) },
+      { id: 5, saleBillId: 1, itemId: 9, unitId: 1014, qtyInSoldUnit: 4, qtyInBaseUnit: 4, unitPriceAtSale: 95, lineTotal: 380, createdAt: hoursAgo(2) },
     ],
   },
   {
-    id: 2, shopId: 1, customerId: null, billDate: hoursAgo(5), paymentType: "cash",
-    totalAmount: 980, syncStatus: "synced",
+    id: 2, uuid: "sale-0002-aaaa-bbbb-cccc0002", shopId: 1, customerId: null, billDate: hoursAgo(5),
+    paymentType: "cash", totalAmount: 980, syncStatus: "synced",
+    createdAt: hoursAgo(5), updatedAt: hoursAgo(5),
     lines: [
-      { id: 6, saleBillId: 2, itemId: 6, unitId: 1011, qtyInSoldUnit: 2, qtyInBaseUnit: 2, unitPriceAtSale: 350, lineTotal: 700 },
-      { id: 7, saleBillId: 2, itemId: 7, unitId: 1012, qtyInSoldUnit: 1, qtyInBaseUnit: 1, unitPriceAtSale: 280, lineTotal: 280 },
+      { id: 6, saleBillId: 2, itemId: 6, unitId: 1011, qtyInSoldUnit: 2, qtyInBaseUnit: 2, unitPriceAtSale: 350, lineTotal: 700, createdAt: hoursAgo(5) },
+      { id: 7, saleBillId: 2, itemId: 7, unitId: 1012, qtyInSoldUnit: 1, qtyInBaseUnit: 1, unitPriceAtSale: 280, lineTotal: 280, createdAt: hoursAgo(5) },
     ],
   },
   {
-    id: 3, shopId: 1, customerId: 5, billDate: daysAgo(1), paymentType: "udhaar",
-    totalAmount: 3550, syncStatus: "synced",
+    id: 3, uuid: "sale-0003-aaaa-bbbb-cccc0003", shopId: 1, customerId: 5, billDate: daysAgo(1),
+    paymentType: "udhaar", totalAmount: 3550, syncStatus: "synced",
+    createdAt: daysAgo(1), updatedAt: daysAgo(1),
     lines: [
-      { id: 8, saleBillId: 3, itemId: 17, unitId: 1028, qtyInSoldUnit: 2, qtyInBaseUnit: 2, unitPriceAtSale: 1200, lineTotal: 2400 },
-      { id: 9, saleBillId: 3, itemId: 9, unitId: 1014, qtyInSoldUnit: 12, qtyInBaseUnit: 12, unitPriceAtSale: 95, lineTotal: 1140 },
+      { id: 8, saleBillId: 3, itemId: 17, unitId: 1028, qtyInSoldUnit: 2, qtyInBaseUnit: 2, unitPriceAtSale: 1200, lineTotal: 2400, createdAt: daysAgo(1) },
+      { id: 9, saleBillId: 3, itemId: 9, unitId: 1014, qtyInSoldUnit: 12, qtyInBaseUnit: 12, unitPriceAtSale: 95, lineTotal: 1140, createdAt: daysAgo(1) },
     ],
   },
   {
-    id: 4, shopId: 1, customerId: null, billDate: hoursAgo(1), paymentType: "cash",
-    totalAmount: 540, syncStatus: "pending",
+    id: 4, uuid: "sale-0004-aaaa-bbbb-cccc0004", shopId: 1, customerId: null, billDate: hoursAgo(1),
+    paymentType: "cash", totalAmount: 540, syncStatus: "pending",
+    createdAt: hoursAgo(1), updatedAt: hoursAgo(1),
     lines: [
-      { id: 10, saleBillId: 4, itemId: 1, unitId: 1000, qtyInSoldUnit: 80, qtyInBaseUnit: 80, unitPriceAtSale: 5, lineTotal: 400 },
-      { id: 11, saleBillId: 4, itemId: 13, unitId: 1022, qtyInSoldUnit: 35, qtyInBaseUnit: 35, unitPriceAtSale: 4, lineTotal: 140 },
+      { id: 10, saleBillId: 4, itemId: 1, unitId: 1000, qtyInSoldUnit: 80, qtyInBaseUnit: 80, unitPriceAtSale: 5, lineTotal: 400, createdAt: hoursAgo(1) },
+      { id: 11, saleBillId: 4, itemId: 13, unitId: 1022, qtyInSoldUnit: 35, qtyInBaseUnit: 35, unitPriceAtSale: 4, lineTotal: 140, createdAt: hoursAgo(1) },
     ],
   },
 ];
 
+// Purchase bills — unitCost semantics changed (per resolution #5):
+//   unitCost = cost per SELECTED unit (e.g. 1 Box = Rs. 350 for Box of 50)
+//   costPerBaseUnit = unitCost / conversionToBase (derived, cached)
 export const seedPurchaseBills: PurchaseBill[] = [
   {
-    id: 1, shopId: 1, supplierId: 3, billDate: daysAgo(3), paymentType: "cash",
-    totalAmount: 5000, syncStatus: "synced",
+    id: 1, uuid: "pur-0001-aaaa-bbbb-cccc0001", shopId: 1, supplierId: 3, billDate: daysAgo(3),
+    paymentType: "cash", totalAmount: 974, syncStatus: "synced",
+    createdAt: daysAgo(3), updatedAt: daysAgo(3),
     lines: [
-      { id: 1, purchaseBillId: 1, itemId: 11, unitId: 1019, qtyInPurchasedUnit: 1, qtyInBaseUnit: 50, unitCost: 7, lineTotal: 350 },
-      { id: 2, purchaseBillId: 1, itemId: 13, unitId: 1023, qtyInPurchasedUnit: 1, qtyInBaseUnit: 100, unitCost: 2, lineTotal: 200 },
-      { id: 3, purchaseBillId: 1, itemId: 4, unitId: 1008, qtyInPurchasedUnit: 4, qtyInBaseUnit: 80, unitCost: 3.5, lineTotal: 280 },
-      { id: 4, purchaseBillId: 1, itemId: 1, unitId: 1001, qtyInPurchasedUnit: 4, qtyInBaseUnit: 48, unitCost: 3, lineTotal: 144 },
+      // M8 Bolt: 1 Box @ Rs. 350 per box = 50 pieces at Rs. 7 each
+      { id: 1, purchaseBillId: 1, itemId: 11, unitId: 1019, qtyInPurchasedUnit: 1, qtyInBaseUnit: 50, unitCost: 350, costPerBaseUnit: 7, lineTotal: 350, createdAt: daysAgo(3) },
+      // M8 Nut: 1 Box @ Rs. 200 per box = 100 pieces at Rs. 2 each
+      { id: 2, purchaseBillId: 1, itemId: 13, unitId: 1023, qtyInPurchasedUnit: 1, qtyInBaseUnit: 100, unitCost: 200, costPerBaseUnit: 2, lineTotal: 200, createdAt: daysAgo(3) },
+      // Wood Screw: 4 Box @ Rs. 70 per box (Box=20) = 80 pieces at Rs. 3.5 each
+      { id: 3, purchaseBillId: 1, itemId: 4, unitId: 1008, qtyInPurchasedUnit: 4, qtyInBaseUnit: 80, unitCost: 70, costPerBaseUnit: 3.5, lineTotal: 280, createdAt: daysAgo(3) },
+      // Steel Nail: 4 Box @ Rs. 36 per box (Box=12) = 48 pieces at Rs. 3 each
+      { id: 4, purchaseBillId: 1, itemId: 1, unitId: 1001, qtyInPurchasedUnit: 4, qtyInBaseUnit: 48, unitCost: 36, costPerBaseUnit: 3, lineTotal: 144, createdAt: daysAgo(3) },
     ],
   },
   {
-    id: 2, shopId: 1, supplierId: 1, billDate: daysAgo(7), paymentType: "udhaar",
-    totalAmount: 8200, syncStatus: "synced",
+    id: 2, uuid: "pur-0002-aaaa-bbbb-cccc0002", shopId: 1, supplierId: 1, billDate: daysAgo(7),
+    paymentType: "udhaar", totalAmount: 7380, syncStatus: "synced",
+    createdAt: daysAgo(7), updatedAt: daysAgo(7),
     lines: [
-      { id: 5, purchaseBillId: 2, itemId: 6, unitId: 1011, qtyInPurchasedUnit: 15, qtyInBaseUnit: 15, unitCost: 220, lineTotal: 3300 },
-      { id: 6, purchaseBillId: 2, itemId: 7, unitId: 1012, qtyInPurchasedUnit: 12, qtyInBaseUnit: 12, unitCost: 180, lineTotal: 2160 },
-      { id: 7, purchaseBillId: 2, itemId: 15, unitId: 1026, qtyInPurchasedUnit: 6, qtyInBaseUnit: 6, unitCost: 320, lineTotal: 1920 },
+      { id: 5, purchaseBillId: 2, itemId: 6, unitId: 1011, qtyInPurchasedUnit: 15, qtyInBaseUnit: 15, unitCost: 220, costPerBaseUnit: 220, lineTotal: 3300, createdAt: daysAgo(7) },
+      { id: 6, purchaseBillId: 2, itemId: 7, unitId: 1012, qtyInPurchasedUnit: 12, qtyInBaseUnit: 12, unitCost: 180, costPerBaseUnit: 180, lineTotal: 2160, createdAt: daysAgo(7) },
+      { id: 7, purchaseBillId: 2, itemId: 15, unitId: 1026, qtyInPurchasedUnit: 6, qtyInBaseUnit: 6, unitCost: 320, costPerBaseUnit: 320, lineTotal: 1920, createdAt: daysAgo(7) },
     ],
   },
 ];
 
+// Khata transactions — related_bill_id split into 3 explicit FKs (per resolution #6)
 export const seedKhataTransactions: KhataTransaction[] = [
   // Customer 2 (Rashid) — owes 2400 now
-  { id: 1, partyType: "customer", partyId: 2, transactionType: "credit_given", amount: 1240, relatedBillId: 1, transactionDate: hoursAgo(2) },
-  { id: 2, partyType: "customer", partyId: 2, transactionType: "payment_received", amount: 1000, transactionDate: daysAgo(3), note: "Partial payment" },
-  { id: 3, partyType: "customer", partyId: 2, transactionType: "credit_given", amount: 2160, relatedBillId: undefined, transactionDate: daysAgo(5), note: "Earlier bill" },
+  { id: 1, partyType: "customer", partyId: 2, transactionType: "credit_given", amount: 1240, relatedSaleBillId: 1, transactionDate: hoursAgo(2), createdAt: hoursAgo(2) },
+  { id: 2, partyType: "customer", partyId: 2, transactionType: "payment_received", amount: 1000, transactionDate: daysAgo(3), note: "Partial payment", createdAt: daysAgo(3) },
+  { id: 3, partyType: "customer", partyId: 2, transactionType: "credit_given", amount: 2160, transactionDate: daysAgo(5), note: "Earlier bill", createdAt: daysAgo(5) },
   // Customer 5 (Salim)
-  { id: 4, partyType: "customer", partyId: 5, transactionType: "credit_given", amount: 3550, relatedBillId: 3, transactionDate: daysAgo(1) },
-  { id: 5, partyType: "customer", partyId: 5, transactionType: "payment_received", amount: 250, transactionDate: daysAgo(2) },
+  { id: 4, partyType: "customer", partyId: 5, transactionType: "credit_given", amount: 3550, relatedSaleBillId: 3, transactionDate: daysAgo(1), createdAt: daysAgo(1) },
+  { id: 5, partyType: "customer", partyId: 5, transactionType: "payment_received", amount: 250, transactionDate: daysAgo(2), createdAt: daysAgo(2) },
   // Customer 3 (Imran)
-  { id: 6, partyType: "customer", partyId: 3, transactionType: "credit_given", amount: 8750, relatedBillId: undefined, transactionDate: daysAgo(12), note: "Bulk supply" },
+  { id: 6, partyType: "customer", partyId: 3, transactionType: "credit_given", amount: 8750, transactionDate: daysAgo(12), note: "Bulk supply", createdAt: daysAgo(12) },
   // Suppliers
-  { id: 7, partyType: "supplier", partyId: 1, transactionType: "payable_incurred", amount: 8200, relatedBillId: 2, transactionDate: daysAgo(7) },
-  { id: 8, partyType: "supplier", partyId: 3, transactionType: "payable_incurred", amount: 5000, relatedBillId: 1, transactionDate: daysAgo(3) },
-  { id: 9, partyType: "supplier", partyId: 3, transactionType: "payment_made", amount: 200, transactionDate: daysAgo(2), note: "Token advance" },
+  { id: 7, partyType: "supplier", partyId: 1, transactionType: "payable_incurred", amount: 7380, relatedPurchaseBillId: 2, transactionDate: daysAgo(7), createdAt: daysAgo(7) },
+  { id: 8, partyType: "supplier", partyId: 3, transactionType: "payable_incurred", amount: 974, relatedPurchaseBillId: 1, transactionDate: daysAgo(3), createdAt: daysAgo(3) },
+  { id: 9, partyType: "supplier", partyId: 3, transactionType: "payment_made", amount: 200, transactionDate: daysAgo(2), note: "Token advance", createdAt: daysAgo(2) },
 ];
 
+// Notifications — khata_reminder added with shop_id (per resolution #7)
 export const seedNotifications: AppNotification[] = [
-  { id: 1, type: "low_stock", message: "Cabinet Lock is low on stock (5 left)", relatedItemId: 8, isRead: false, createdAt: hoursAgo(3) },
-  { id: 2, type: "low_stock", message: "Wall Screw is low on stock (45 left)", relatedItemId: 5, isRead: false, createdAt: hoursAgo(6) },
-  { id: 3, type: "low_stock", message: "Screwdriver Set is low on stock (8 sets)", relatedItemId: 16, isRead: false, createdAt: hoursAgo(8) },
-  { id: 4, type: "khata_reminder", message: "Imran Construction owes Rs. 8,750", relatedCustomerId: 3, isRead: false, createdAt: daysAgo(1) },
-  { id: 5, type: "khata_reminder", message: "Salim Builder owes Rs. 5,300", relatedCustomerId: 5, isRead: true, createdAt: daysAgo(1) },
+  { id: 1, shopId: 1, type: "low_stock", message: "Cabinet Lock is low on stock (5 left)", relatedItemId: 8, isRead: false, createdAt: hoursAgo(3) },
+  { id: 2, shopId: 1, type: "low_stock", message: "Wall Screw is low on stock (45 left)", relatedItemId: 5, isRead: false, createdAt: hoursAgo(6) },
+  { id: 3, shopId: 1, type: "low_stock", message: "Screwdriver Set is low on stock (8 sets)", relatedItemId: 16, isRead: false, createdAt: hoursAgo(8) },
+  { id: 4, shopId: 1, type: "khata_reminder", message: "Imran Construction owes Rs. 8,750 (since 12 days)", relatedCustomerId: 3, isRead: false, createdAt: hoursAgo(4) },
+  { id: 5, shopId: 1, type: "khata_reminder", message: "Salim Builder owes Rs. 5,300", relatedCustomerId: 5, isRead: true, createdAt: daysAgo(1) },
 ];
 
 export const seedRateHistory: RateHistoryEntry[] = [
@@ -269,10 +229,15 @@ export const seedRateHistory: RateHistoryEntry[] = [
   { id: 2, itemId: 6, oldPrice: 320, newPrice: 350, changedAt: daysAgo(4) },
 ];
 
+// Stock adjustments (per resolution #2)
+export const seedStockAdjustments: StockAdjustment[] = [
+  { id: 1, itemId: 8, type: "loss", deltaInBaseUnit: -10, newQtyInBaseUnit: 5, reason: "Damaged in storage", adjustedAt: daysAgo(2) },
+  { id: 2, itemId: 1, type: "restock", deltaInBaseUnit: 50, newQtyInBaseUnit: 350, reason: "Found extra box in back room", adjustedAt: daysAgo(5) },
+];
+
 export const seedAiImportSessions: AiImportSession[] = [
   {
-    id: 1,
-    sourceType: "photo",
+    id: 1, shopId: 1, sourceType: "photo",
     rawExtracted: [
       { name: "M12 Bolt", price: 25 },
       { name: "M12 Nut", price: 8 },
@@ -280,6 +245,6 @@ export const seedAiImportSessions: AiImportSession[] = [
       { name: "Door Hinge 5in", price: 130 },
     ],
     status: "awaiting_review",
-    createdAt: hoursAgo(2),
+    createdAt: hoursAgo(2), updatedAt: hoursAgo(2),
   },
 ];

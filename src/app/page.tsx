@@ -7,6 +7,8 @@ import { LoginScreen } from "@/components/screens/LoginScreen";
 import { DashboardScreen } from "@/components/screens/DashboardScreen";
 import { InventoryScreen } from "@/components/screens/InventoryScreen";
 import { ItemAddEditScreen } from "@/components/screens/ItemAddEditScreen";
+import { ItemDetailScreen } from "@/components/screens/ItemDetailScreen";
+import { StockAdjustmentScreen } from "@/components/screens/StockAdjustmentScreen";
 import { SaleNewScreen } from "@/components/screens/SaleNewScreen";
 import { BillHistoryScreen } from "@/components/screens/BillHistoryScreen";
 import { ReturnScreen } from "@/components/screens/ReturnScreen";
@@ -35,6 +37,8 @@ export default function Home() {
         {screen === "dashboard" && <DashboardScreen />}
         {screen === "inventory" && <InventoryScreen />}
         {(screen === "item-add" || screen === "item-edit") && <ItemAddEditScreen />}
+        {screen === "item-detail" && <ItemDetailScreen />}
+        {screen === "stock-adjust" && <StockAdjustmentScreen />}
         {screen === "sale-new" && <SaleNewScreen />}
         {screen === "bill-history" && <BillHistoryScreen />}
         {screen === "return" && <ReturnScreen />}

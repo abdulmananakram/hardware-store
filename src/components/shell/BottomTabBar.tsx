@@ -35,6 +35,8 @@ export function BottomTabBar() {
     "ai-import-review",
     "item-edit",
     "item-add",
+    "item-detail",
+    "stock-adjust",
   ];
   if (MODAL_SCREENS.includes(screen)) return null;
 

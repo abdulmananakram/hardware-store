@@ -17,6 +17,7 @@ export function ItemAddEditScreen() {
   const updateItem = useApp((s) => s.updateItem);
   const softDeleteItem = useApp((s) => s.softDeleteItem);
   const addCategory = useApp((s) => s.addCategory);
+  const shopConfig = useApp((s) => s.shopConfig);
   const navigate = useApp((s) => s.navigate);
 
   const editing = params.itemId ? items.find((i) => i.id === params.itemId) : null;
@@ -24,11 +25,17 @@ export function ItemAddEditScreen() {
   const [urduName, setUrduName] = useState(editing?.urduName || "");
   const [icon, setIcon] = useState(editing?.icon || "📦");
   const [categoryId, setCategoryId] = useState<number | null>(editing?.categoryId || null);
-  const [baseUnitName, setBaseUnitName] = useState(editing?.baseUnitName || "Piece");
+  // Per resolution #2: initial_qty_in_base_unit (only used when creating)
+  const [baseUnitName, setBaseUnitName] = useState(
+    editing?.baseUnitName || shopConfig.baseUnitDefault
+  );
   const [price, setPrice] = useState(editing ? String(editing.pricePerBaseUnit) : "");
   const [cost, setCost] = useState(editing?.costPerBaseUnit ? String(editing.costPerBaseUnit) : "");
-  const [qty, setQty] = useState(editing ? String(editing.qtyInBaseUnit) : "0");
-  const [threshold, setThreshold] = useState(editing ? String(editing.lowStockThreshold) : "10");
+  // For NEW items: opening stock input
+  const [initialQty, setInitialQty] = useState(editing ? String(editing.initialQtyInBaseUnit) : "0");
+  const [threshold, setThreshold] = useState(
+    editing ? String(editing.lowStockThreshold) : String(shopConfig.lowStockThresholdDefault)
+  );
   const [extraUnits, setExtraUnits] = useState(
     editing
       ? editing.units.filter((u) => !u.isBaseUnit).map((u) => ({
@@ -58,7 +65,14 @@ export function ItemAddEditScreen() {
     if (editing) {
       const newPrice = parseFloat(price);
       const priceChanged = newPrice !== editing.pricePerBaseUnit;
-      if (priceChanged && !confirm(`Change price from ${fmtRs(editing.pricePerBaseUnit)} to ${fmtRs(newPrice)}? Past bills are unaffected.`)) {
+      if (
+        priceChanged &&
+        !confirm(
+          `Change price from ${fmtRs(editing.pricePerBaseUnit)} to ${fmtRs(
+            newPrice
+          )}? Past bills are unaffected.`
+        )
+      ) {
         return;
       }
       updateItem(editing.id, {
@@ -69,11 +83,12 @@ export function ItemAddEditScreen() {
         baseUnitName: baseUnitName.trim(),
         pricePerBaseUnit: newPrice,
         costPerBaseUnit: cost ? parseFloat(cost) : undefined,
-        qtyInBaseUnit: parseFloat(qty) || 0,
         lowStockThreshold: parseFloat(threshold),
         units: editing.units.map((u) => u), // existing units kept
       });
+      navigate("item-detail", { itemId: editing.id });
     } else {
+      // Per resolution #2 — pass initialQtyInBaseUnit
       addItem({
         name: name.trim(),
         urduName: urduName.trim() || undefined,
@@ -82,11 +97,11 @@ export function ItemAddEditScreen() {
         pricePerBaseUnit: parseFloat(price),
         lowStockThreshold: parseFloat(threshold),
         icon,
-        qtyInBaseUnit: parseFloat(qty) || 0,
+        initialQtyInBaseUnit: parseFloat(initialQty) || 0,
         extraUnits,
       });
+      navigate("inventory");
     }
-    navigate("inventory");
   };
 
   const handleDelete = () => {
@@ -112,9 +127,7 @@ export function ItemAddEditScreen() {
                 key={e}
                 onClick={() => setIcon(e)}
                 className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl border-2 transition ${
-                  icon === e
-                    ? "bg-teal-50 border-teal-500"
-                    : "border-slate-200 bg-white"
+                  icon === e ? "bg-teal-50 border-teal-500" : "border-slate-200 bg-white"
                 }`}
               >
                 {e}
@@ -136,7 +149,9 @@ export function ItemAddEditScreen() {
 
         {/* Urdu name */}
         <div>
-          <Label className="text-[11px] font-bold uppercase text-slate-500">Urdu Name (optional)</Label>
+          <Label className="text-[11px] font-bold uppercase text-slate-500">
+            Urdu Name (optional)
+          </Label>
           <Input
             value={urduName}
             onChange={(e) => setUrduName(e.target.value)}
@@ -204,7 +219,9 @@ export function ItemAddEditScreen() {
             />
           </div>
           <div>
-            <Label className="text-[11px] font-bold uppercase text-slate-500">Cost (optional)</Label>
+            <Label className="text-[11px] font-bold uppercase text-slate-500">
+              Cost (optional)
+            </Label>
             <Input
               type="number"
               inputMode="numeric"
@@ -216,30 +233,55 @@ export function ItemAddEditScreen() {
           </div>
         </div>
 
-        {/* Qty + threshold */}
-        <div className="grid grid-cols-2 gap-2">
+        {/* Opening stock (per resolution #2) — only for new items */}
+        {!editing && (
           <div>
-            <Label className="text-[11px] font-bold uppercase text-slate-500">Stock (in {baseUnitName || "unit"})</Label>
+            <Label className="text-[11px] font-bold uppercase text-slate-500">
+              Opening Stock (in {baseUnitName || "unit"})
+            </Label>
             <Input
               type="number"
               inputMode="numeric"
-              value={qty}
-              onChange={(e) => setQty(e.target.value)}
+              value={initialQty}
+              onChange={(e) => setInitialQty(e.target.value)}
               placeholder="0"
               className="h-11 mt-1 font-bold"
             />
+            <p className="text-[11px] text-slate-500 mt-1">
+              Initial stock count when this item is added. Recorded as an opening stock adjustment.
+            </p>
           </div>
-          <div>
-            <Label className="text-[11px] font-bold uppercase text-slate-500">Low-stock threshold</Label>
-            <Input
-              type="number"
-              inputMode="numeric"
-              value={threshold}
-              onChange={(e) => setThreshold(e.target.value)}
-              placeholder="0"
-              className="h-11 mt-1"
-            />
+        )}
+        {editing && (
+          <div className="bg-slate-50 rounded-lg p-3">
+            <p className="text-[11px] font-bold uppercase text-slate-500">
+              Opening Stock (locked)
+            </p>
+            <p className="font-bold">
+              {editing.initialQtyInBaseUnit} {editing.baseUnitName}
+            </p>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Set at creation. Use &quot;Stock Adjustment&quot; to change current stock.
+            </p>
           </div>
+        )}
+
+        {/* Threshold */}
+        <div>
+          <Label className="text-[11px] font-bold uppercase text-slate-500">
+            Low-stock threshold
+          </Label>
+          <Input
+            type="number"
+            inputMode="numeric"
+            value={threshold}
+            onChange={(e) => setThreshold(e.target.value)}
+            placeholder="0"
+            className="h-11 mt-1"
+          />
+          <p className="text-[11px] text-slate-500 mt-1">
+            Shop default: {shopConfig.lowStockThresholdDefault}. Alert fires when stock ≤ this.
+          </p>
         </div>
 
         {/* Extra units */}
@@ -250,10 +292,7 @@ export function ItemAddEditScreen() {
             </Label>
             <button
               onClick={() =>
-                setExtraUnits([
-                  ...extraUnits,
-                  { unitName: "", conversionToBase: 1 },
-                ])
+                setExtraUnits([...extraUnits, { unitName: "", conversionToBase: 1 }])
               }
               className="text-[11px] font-bold text-teal-700 hover:underline"
             >
@@ -285,7 +324,10 @@ export function ItemAddEditScreen() {
                   value={String(u.conversionToBase)}
                   onChange={(e) => {
                     const next = [...extraUnits];
-                    next[i] = { ...next[i], conversionToBase: parseFloat(e.target.value) || 1 };
+                    next[i] = {
+                      ...next[i],
+                      conversionToBase: parseFloat(e.target.value) || 1,
+                    };
                     setExtraUnits(next);
                   }}
                   className="h-10 w-20"
@@ -316,16 +358,28 @@ export function ItemAddEditScreen() {
       </div>
 
       {/* Bottom save bar */}
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[560px] bg-white border-t border-slate-200 z-30 p-3" style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
+      <div
+        className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[560px] bg-white border-t border-slate-200 z-30 p-3"
+        style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}
+      >
         <div className="flex gap-2">
           {editing && (
-            <Button
-              variant="outline"
-              onClick={() => setConfirmDelete(true)}
-              className="border-rose-200 text-rose-600 hover:bg-rose-50 font-bold h-12"
-            >
-              🗑
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                onClick={() => setConfirmDelete(true)}
+                className="border-rose-200 text-rose-600 hover:bg-rose-50 font-bold h-12"
+              >
+                🗑
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => navigate("stock-adjust", { itemId: editing.id })}
+                className="border-amber-300 text-amber-700 hover:bg-amber-50 font-bold h-12"
+              >
+                ⚖️
+              </Button>
+            </>
           )}
           <Button
             onClick={handleSave}
@@ -377,8 +431,9 @@ export function ItemAddEditScreen() {
       {/* Confirm delete */}
       <Sheet open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Delete item?">
         <p className="text-sm text-slate-600">
-          This will soft-delete <b>{editing?.name}</b>. It will no longer appear in inventory,
-          but old bills keep referencing it.
+          This will soft-delete <b>{editing?.name}</b>. It will no longer appear in inventory, but
+          old bills keep referencing it. Items on a bill in the last {shopConfig.itemDeletionWindowDays}{" "}
+          days cannot be deleted.
         </p>
         <div className="grid grid-cols-2 gap-2 mt-4">
           <Button variant="outline" onClick={() => setConfirmDelete(false)}>

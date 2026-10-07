@@ -214,7 +214,7 @@ export function PurchaseNewScreen() {
                     </div>
                     <div>
                       <p className="text-[11px] font-bold uppercase text-slate-500 mb-1">
-                        Cost / {item.baseUnitName}
+                        Cost per {unit?.unitName || "unit"}
                       </p>
                       <Input
                         type="number"
@@ -226,6 +226,13 @@ export function PurchaseNewScreen() {
                       />
                     </div>
                   </div>
+
+                  {/* Per resolution #5 — show derived cost per base unit */}
+                  {unit && unitCost && parseFloat(unitCost) > 0 && unit.conversionToBase > 1 && (
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      = <b>Rs. {((parseFloat(unitCost) || 0) / unit.conversionToBase).toFixed(2)}</b> per {item.baseUnitName} (auto-derived)
+                    </p>
+                  )}
 
                   <div className="mt-3 p-2.5 bg-teal-50 border border-teal-200 rounded-lg flex items-baseline justify-between">
                     <span className="text-sm text-slate-700">Line Total</span>
@@ -365,22 +372,49 @@ export function PurchaseNewScreen() {
       {/* Done */}
       <Sheet open={!!done} onClose={() => { setDone(null); navigate("bill-history", { filterType: "purchases" }); }} title="✅ Purchase Saved">
         {done && (
-          <div className="text-center py-2">
-            <div className="text-5xl mb-2">✅</div>
-            <p className="font-extrabold text-lg">Purchase #{done.id} saved</p>
-            <p className="text-3xl font-extrabold text-slate-900 mt-2">{fmtRs(done.total)}</p>
-            <p className="text-xs text-amber-600 mt-2 bg-amber-50 inline-block px-3 py-1 rounded-full font-bold">
-              ☁ Pending sync — will upload when online
-            </p>
-            <Button
-              onClick={() => { setDone(null); navigate("bill-history", { filterType: "purchases" }); }}
-              className="w-full mt-5 bg-teal-600 hover:bg-teal-500 font-bold h-11"
-            >
-              📜 View History
-            </Button>
-          </div>
+          <DonePurchaseView billId={done.id} total={done.total} onHistory={() => { setDone(null); navigate("bill-history", { filterType: "purchases" }); }} />
         )}
       </Sheet>
+    </div>
+  );
+}
+
+// Per resolution #1 — live sync status display for purchase
+function DonePurchaseView({
+  billId,
+  total,
+  onHistory,
+}: {
+  billId: number;
+  total: number;
+  onHistory: () => void;
+}) {
+  const syncStatus = useApp((s) => s.purchaseBills.find((b) => b.id === billId)?.syncStatus || "pending");
+  const isOnline = useApp((s) => s.isOnline);
+  return (
+    <div className="text-center py-2">
+      <div className="text-5xl mb-2">✅</div>
+      <p className="font-extrabold text-lg">Purchase #{billId} saved</p>
+      <p className="text-3xl font-extrabold text-slate-900 mt-2">{fmtRs(total)}</p>
+      {syncStatus === "synced" ? (
+        <p className="text-xs text-emerald-600 mt-2 bg-emerald-50 inline-block px-3 py-1 rounded-full font-bold">
+          ✓ Synced to cloud
+        </p>
+      ) : syncStatus === "syncing" ? (
+        <p className="text-xs text-blue-600 mt-2 bg-blue-50 inline-block px-3 py-1 rounded-full font-bold">
+          ⟳ Syncing to cloud…
+        </p>
+      ) : (
+        <p className="text-xs text-amber-600 mt-2 bg-amber-50 inline-block px-3 py-1 rounded-full font-bold">
+          {isOnline ? "☁ Queued — will upload shortly" : "📵 Offline — will upload when back online"}
+        </p>
+      )}
+      <Button
+        onClick={onHistory}
+        className="w-full mt-5 bg-teal-600 hover:bg-teal-500 font-bold h-11"
+      >
+        📜 View History
+      </Button>
     </div>
   );
 }

@@ -13,6 +13,7 @@ export function BillHistoryScreen() {
   const getCustomer = useApp((s) => s.getCustomer);
   const items = useApp((s) => s.items);
   const cancelSaleBill = useApp((s) => s.cancelSaleBill);
+  const cancelPurchaseBill = useApp((s) => s.cancelPurchaseBill);
   const navigate = useApp((s) => s.navigate);
 
   const [tab, setTab] = useState<"sales" | "purchases">(
@@ -21,6 +22,7 @@ export function BillHistoryScreen() {
   const [openBill, setOpenBill] = useState<number | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [showCancel, setShowCancel] = useState(false);
+  const [err, setErr] = useState("");
 
   const list =
     tab === "sales"
@@ -208,6 +210,18 @@ export function BillHistoryScreen() {
                   </Button>
                 </>
               )}
+              {bill.kind === "purchase" && !bill.cancelled && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setCancelReason("");
+                    setShowCancel(true);
+                  }}
+                  className="border-rose-300 text-rose-700 font-bold h-11 col-span-2"
+                >
+                  🚫 Cancel Purchase
+                </Button>
+              )}
               <Button
                 onClick={() => setOpenBill(null)}
                 className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold h-11 col-span-2"
@@ -219,11 +233,21 @@ export function BillHistoryScreen() {
         )}
       </Sheet>
 
-      {/* Cancel reason sheet */}
+      {/* Cancel reason sheet — handles both sale & purchase bills */}
       <Sheet open={showCancel} onClose={() => setShowCancel(false)} title="Cancel Bill?">
         <p className="text-sm text-slate-600 mb-3">
-          Cancelling will reverse stock changes and any khata entry. The bill stays in
-          history as <b>Cancelled</b>.
+          {bill?.kind === "purchase" ? (
+            <>
+              Cancelling a purchase will <b>reverse the stock addition</b>. If any of the
+              purchased items have already been sold further, the cancel will be{" "}
+              <b>blocked</b> to prevent negative stock.
+            </>
+          ) : (
+            <>
+              Cancelling will reverse stock changes and any khata entry. The bill stays in
+              history as <b>Cancelled</b>.
+            </>
+          )}
         </p>
         <textarea
           value={cancelReason}
@@ -231,13 +255,23 @@ export function BillHistoryScreen() {
           placeholder="Reason (e.g. wrong entry, customer returned all)"
           className="w-full p-3 border-2 border-slate-200 rounded-lg text-sm h-24"
         />
+        {err && <p className="text-rose-600 text-sm mt-2 bg-rose-50 p-2 rounded-lg">{err}</p>}
         <div className="grid grid-cols-2 gap-2 mt-3">
           <Button variant="outline" onClick={() => setShowCancel(false)}>
             Keep Bill
           </Button>
           <Button
             onClick={() => {
-              if (bill) cancelSaleBill(bill.id, cancelReason || "No reason");
+              if (!bill) return;
+              const res =
+                bill.kind === "sale"
+                  ? cancelSaleBill(bill.id, cancelReason || "No reason")
+                  : cancelPurchaseBill(bill.id, cancelReason || "No reason");
+              if (!res.ok) {
+                setErr(res.error || "Cannot cancel");
+                return;
+              }
+              setErr("");
               setShowCancel(false);
               setOpenBill(null);
             }}

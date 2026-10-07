@@ -242,12 +242,17 @@ export function SaleNewScreen() {
                 <span className="font-extrabold text-xl">{fmtRs(total)}</span>
               </div>
 
-              {/* Payment type */}
+              {/* Payment type — per resolution #3: only full-cash or full-udhaar in v1 */}
               <div className="mt-3">
-                <p className="text-[11px] font-bold uppercase text-slate-500 mb-1">
-                  Payment Type
-                </p>
-                <div className="flex gap-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-bold uppercase text-slate-500">
+                    Payment Type
+                  </p>
+                  <span className="text-[10px] text-slate-400">
+                    v1: full cash or full udhaar only
+                  </span>
+                </div>
+                <div className="flex gap-2 mt-1">
                   <button
                     onClick={() => draftSaleSetPayment("cash")}
                     className={`flex-1 py-2.5 rounded-lg border-2 font-bold text-sm transition ${
@@ -257,6 +262,9 @@ export function SaleNewScreen() {
                     }`}
                   >
                     💵 Cash
+                    <span className="block text-[10px] font-normal text-slate-500">
+                      Pay now, full amount
+                    </span>
                   </button>
                   <button
                     onClick={() => draftSaleSetPayment("udhaar")}
@@ -267,8 +275,16 @@ export function SaleNewScreen() {
                     }`}
                   >
                     📒 Udhaar
+                    <span className="block text-[10px] font-normal text-slate-500">
+                      Add to khata — customer required
+                    </span>
                   </button>
                 </div>
+                {draftSale.paymentType === "udhaar" && !draftSale.customerId && (
+                  <p className="text-[11px] text-amber-700 bg-amber-50 p-2 rounded-lg mt-2 font-semibold">
+                    ⚠ Udhaar requires a customer. Pick one below.
+                  </p>
+                )}
               </div>
 
               {/* Customer — required for udhaar */}
@@ -506,40 +522,52 @@ export function SaleNewScreen() {
 
       {/* Done toast / receipt */}
       <Sheet open={!!doneBill} onClose={closeDone} title="✅ Bill Saved">
-        {doneBill && (
-          <div className="text-center py-2">
-            <div className="text-5xl mb-2">✅</div>
-            <p className="font-extrabold text-lg">Bill #{doneBill.id} saved</p>
-            <p className="text-3xl font-extrabold text-slate-900 mt-2">
-              {fmtRs(doneBill.total)}
-            </p>
-            <p className="text-xs text-amber-600 mt-2 bg-amber-50 inline-block px-3 py-1 rounded-full font-bold">
-              ☁ Pending sync — will upload when online
-            </p>
-            <div className="grid grid-cols-2 gap-2 mt-5">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setDoneBill(null);
-                  navigate("bill-history", { filterType: "sales" });
-                }}
-                className="h-11"
-              >
-                📜 View History
-              </Button>
-              <Button
-                onClick={() => {
-                  setDoneBill(null);
-                  // Stay on sale-new screen with empty draft (already reset)
-                }}
-                className="bg-teal-600 hover:bg-teal-500 h-11"
-              >
-                + New Bill
-              </Button>
-            </div>
-          </div>
-        )}
+        {doneBill && <DoneBillView billId={doneBill.id} total={doneBill.total} onHistory={() => { setDoneBill(null); navigate("bill-history", { filterType: "sales" }); }} onNew={() => setDoneBill(null)} />}
       </Sheet>
+    </div>
+  );
+}
+
+// Per resolution #1 — live sync status display
+function DoneBillView({
+  billId,
+  total,
+  onHistory,
+  onNew,
+}: {
+  billId: number;
+  total: number;
+  onHistory: () => void;
+  onNew: () => void;
+}) {
+  const syncStatus = useApp((s) => s.saleBills.find((b) => b.id === billId)?.syncStatus || "pending");
+  const isOnline = useApp((s) => s.isOnline);
+  return (
+    <div className="text-center py-2">
+      <div className="text-5xl mb-2">✅</div>
+      <p className="font-extrabold text-lg">Bill #{billId} saved</p>
+      <p className="text-3xl font-extrabold text-slate-900 mt-2">{fmtRs(total)}</p>
+      {syncStatus === "synced" ? (
+        <p className="text-xs text-emerald-600 mt-2 bg-emerald-50 inline-block px-3 py-1 rounded-full font-bold">
+          ✓ Synced to cloud
+        </p>
+      ) : syncStatus === "syncing" ? (
+        <p className="text-xs text-blue-600 mt-2 bg-blue-50 inline-block px-3 py-1 rounded-full font-bold">
+          ⟳ Syncing to cloud…
+        </p>
+      ) : (
+        <p className="text-xs text-amber-600 mt-2 bg-amber-50 inline-block px-3 py-1 rounded-full font-bold">
+          {isOnline ? "☁ Queued — will upload shortly" : "📵 Offline — will upload when back online"}
+        </p>
+      )}
+      <div className="grid grid-cols-2 gap-2 mt-5">
+        <Button variant="outline" onClick={onHistory} className="h-11">
+          📜 View History
+        </Button>
+        <Button onClick={onNew} className="bg-teal-600 hover:bg-teal-500 h-11">
+          + New Bill
+        </Button>
+      </div>
     </div>
   );
 }
