@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0d9488">
+<title>Hardware Billing</title>
+<style>
+:root{--a:#0d9488;--ad:#0f766e;--bg:#f1f5f4;--pn:#fff;--tx:#0f172a;--mu:#64748b;--bd:#e2e8f0}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0}
+body{font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--tx);padding-bottom:84px;max-width:560px;margin:0 auto;min-height:100vh}
+button{font:inherit;cursor:pointer;border:0;background:var(--pn);color:var(--tx);border-radius:10px;padding:9px 12px}
+button:active{transform:scale(.97)}
+button:disabled{opacity:.4;cursor:not-allowed}
+input{font:inherit;width:100%;border:1.5px solid var(--bd);border-radius:10px;padding:10px 12px;background:#fff;color:var(--tx)}
+input:focus{outline:2px solid var(--a);border-color:var(--a)}
+.m{color:var(--mu)}
+h4{margin:12px 0 6px;font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.6px;font-weight:700}
+
+/* top */
+.top{position:sticky;top:0;z-index:10;background:var(--a);color:#fff;padding:10px 12px 10px;padding-top:max(10px,env(safe-area-inset-top))}
+.brand{font-weight:800;font-size:15px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.brand small{font-weight:600;opacity:.85;font-size:12px}
+.sw{position:relative}
+.sw input{padding:11px 36px 11px 36px;border:0;font-size:15px;box-shadow:0 2px 6px #0003}
+.sw .ic{position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:15px;pointer-events:none}
+.sw .cl{position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;padding:6px 10px;color:var(--mu);font-size:15px}
+
+/* search results */
+#res{padding:8px 12px 0}
+.rl{background:var(--pn);border-radius:12px;box-shadow:0 2px 8px #0002;overflow:hidden;max-height:46vh;overflow-y:auto}
+.rw{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border-radius:0;border-bottom:1px solid var(--bd);padding:10px 12px;font-size:14px}
+.rw:last-child{border:0}
+.rw span{font-size:18px}.rw b{flex:1;font-weight:600}.rw small{color:var(--mu);font-size:12px}
+.none{padding:14px;text-align:center;color:var(--mu)}
+
+/* categories */
+.layout{display:grid;grid-template-columns:82px 1fr;gap:8px;padding:10px 10px 0 8px;align-items:start}
+.cats{position:sticky;top:calc(var(--hh,92px) + 8px);display:flex;flex-direction:column;gap:8px;max-height:calc(100vh - var(--hh,92px) - 100px);overflow-y:auto;scrollbar-width:none;padding-bottom:8px}
+.cats::-webkit-scrollbar{display:none}
+.cb{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 4px 7px;border-radius:14px;border:1.5px solid var(--bd);font-weight:700;font-size:11px;line-height:1.1;background:#fff;box-shadow:0 1px 3px #0001}
+.th{width:52px;height:52px;border-radius:12px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.th img{width:100%;height:100%;object-fit:cover;display:block}
+.th i{font-style:normal;font-size:28px;line-height:1}
+.cb.on{background:var(--a);border-color:var(--a);color:#fff;box-shadow:0 3px 8px #0d948866}
+.cb.on .th{background:#ffffff33}
+
+/* work */
+#work{min-width:0;padding:0 0 12px}
+#work .card:first-child{margin-top:0}
+.card{background:var(--pn);border-radius:14px;padding:12px;box-shadow:0 1px 4px #0001;margin-top:10px}
+.card h3{margin:0 0 2px;font-size:15px;display:flex;align-items:center;justify-content:space-between}
+.card h3 .u{color:var(--mu);font-weight:500;font-size:13px}
+.grp{margin-top:10px}
+.grp h4{margin:0 0 6px;display:flex;align-items:center;gap:6px}
+.grp h4 em{font-style:normal;background:var(--a);color:#fff;border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;font-size:10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:9px 14px;font-size:14px;font-weight:600;border:1.5px solid var(--bd);background:#f8fafc;border-radius:10px}
+.chip.on{background:var(--a);color:#fff;border-color:var(--a)}
+.chip.q{padding:7px 12px;font-size:13px;border-radius:999px}
+.sum{display:flex;flex-wrap:wrap;align-items:center;gap:5px;background:#f0fdfa;border:1px dashed #5eead4;border-radius:10px;padding:8px 10px;margin-top:12px;font-size:13px}
+.ok{background:#ccfbf1;color:#115e59;padding:2px 8px;border-radius:6px;font-weight:700}
+.miss{background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:6px;font-weight:700}
+.amt{display:flex;align-items:center;gap:8px;margin-top:12px;font-weight:800;font-size:16px}
+.amt input{font-size:22px;font-weight:800;padding:9px 12px}
+.go{width:100%;margin-top:10px;background:#16a34a;color:#fff;font-weight:800;font-size:16px;padding:14px;border-radius:12px}
+.empty{text-align:center;color:var(--mu);padding:34px 10px}
+.empty b{display:block;font-size:30px;margin-bottom:6px}
+.x{background:#f1f5f9;padding:6px 10px;border-radius:8px;font-size:13px}
+
+/* bottom bar */
+.bar{position:fixed;left:0;right:0;bottom:0;margin:auto;max-width:560px;background:#0f172a;color:#fff;display:flex;justify-content:space-between;align-items:center;padding:10px 14px;padding-bottom:max(10px,env(safe-area-inset-bottom));z-index:15;border-radius:16px 16px 0 0}
+.bar .t{line-height:1.2}.bar .t small{display:block;color:#94a3b8;font-size:11px}.bar .t b{font-size:18px}
+.bar button{background:var(--a);color:#fff;font-weight:800;padding:11px 18px;border-radius:12px}
+#toast{position:fixed;left:50%;bottom:92px;transform:translateX(-50%) translateY(20px);background:#16a34a;color:#fff;padding:8px 16px;border-radius:999px;font-weight:700;font-size:13px;opacity:0;transition:.25s;z-index:30;pointer-events:none}
+#toast.on{opacity:1;transform:translateX(-50%)}
+
+/* bill view (shown inside the main area, right of the rail) */
+.items{margin:8px 0}
+.bi{display:grid;grid-template-columns:auto 1fr auto;column-gap:8px;row-gap:6px;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd)}
+.bi .ic{font-size:20px}.bi .bd{min-width:0;line-height:1.2;font-size:13px}.bi .bd small{display:block;color:var(--mu);font-size:12px}
+.bi .ba{grid-column:2 / 4;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu)}
+.bi .ba input{padding:6px 8px;font-weight:700;font-size:15px}
+.tt{display:flex;justify-content:space-between;align-items:baseline;font-size:20px;font-weight:800;padding:10px 0;border-top:2px solid #0f172a}
+details{margin:4px 0 8px}summary{cursor:pointer;color:var(--mu);font-size:13px}
+details input{margin-top:6px}
+.btns{display:flex;flex-wrap:wrap;gap:6px}
+.btns button{flex:1 1 40%;font-weight:700;border:1.5px solid var(--bd);padding:12px 6px}
+.btns .save{background:#16a34a;color:#fff;border:0;flex:1 1 100%;order:-1;font-size:15px}
+
+/* modal */
+#modal{display:none}
+#modal.open{display:flex;position:fixed;inset:0;background:#000a;z-index:40;align-items:flex-end;justify-content:center}
+.mbox{background:#fff;border-radius:18px 18px 0 0;padding:16px;width:100%;max-width:560px;max-height:92vh;overflow:auto}
+.big2{font-size:22px;font-weight:800}
+.pm{display:flex;gap:8px;margin:10px 0}.pm button{flex:1;border:1.5px solid var(--bd);font-weight:700}.pm .on{background:#0f172a;color:#fff}
+.rr{display:flex;justify-content:space-between;gap:8px;padding:2px 0}
+.rcpt{font-family:ui-monospace,Consolas,monospace;font-size:12px;border:1px dashed #999;padding:10px;margin:8px 0}.rcpt h3{text-align:center;margin:0 0 4px}
+@media print{body>*:not(#modal){display:none!important}#modal.open{position:static;background:none}.noprint{display:none!important}.mbox{border-radius:0}}
+</style></head><body>
+
+<header class="top">
+  <div class="brand"><span>🔩 Hardware Billing</span><small id="cnt"></small></div>
+  <div class="sw"><span class="ic">🔍</span><input id="q" placeholder="Search: nail, wood screw, lock… (کیل، پیچ)" autocomplete="off" enterkeyhint="search"><button class="cl" id="qx" hidden>✕</button></div>
+</header>
+<div id="res"></div>
+<div class="layout">
+  <nav class="cats" id="cats"></nav>
+  <main id="work"></main>
+</div>
+
+<div class="bar"><div class="t"><small id="bn">0 items</small><b>Rs. <span class="tv">0</span></b></div><button id="vb" data-a="sheet">🧾 VIEW BILL</button></div>
+<div id="modal"></div>
+<div id="toast">✔ Added to bill</div>
+
+<script>
+/* ============ PRODUCT DATA (replace with DB later) ============ */
+const SIZES=['1×2','1×12','1×16','2×12','2×16'], M=['M6','M8','M10','M12'];
+const CATS=[
+ {id:'nails',n:'Nails',u:'کیل',i:'📍',attrs:[{k:'Head',o:['Headed','Headless']},{k:'Use',o:['Wall','Wood','Concrete']},{k:'Size',o:SIZES}]},
+ {id:'screws',n:'Screws',u:'پیچ',i:'🪛',attrs:[{k:'Use',o:['Wood','Wall','Metal']},{k:'Head',o:['Headed','Headless']},{k:'Size',o:SIZES}]},
+ {id:'locks',n:'Locks',u:'تالے',i:'🔒',attrs:[{k:'Type',o:['Door','Padlock','Cabinet']},{k:'Size',o:['40mm','50mm','60mm','70mm']}]},
+ {id:'hinges',n:'Hinges',u:'قبضے',i:'🚪',attrs:[{k:'Type',o:['Door','Cabinet']},{k:'Size',o:['2 in','3 in','4 in','5 in']}]},
+ {id:'bolts',n:'Bolts',u:'بولٹ',i:'⚙️',attrs:[{k:'Type',o:['Standard','Wall','Door']},{k:'Size',o:M}]},
+ {id:'nuts',n:'Nuts',u:'نٹ',i:'🔩',attrs:[{k:'Type',o:['Standard','Lock']},{k:'Size',o:M}]}
+];
+/* ============ STATE ============ */
+let bill=[],cust={},mod=null,sheet=0,pay={paid:'',m:'cash'},st;
+const $=s=>document.querySelector(s);
+const cat=id=>CATS.find(c=>c.id==id), det=(c,s)=>c.attrs.map(a=>s[a.k]).join(' • ');
+const tot=()=>bill.reduce((s,b)=>s+(+b.amt||0),0);
+const ok=()=>st.cat&&st.cat.attrs.every(a=>st.sel[a.k]);
+const rs=()=>st={cat:null,sel:{},amt:'',q:''};
+/* search entries: category, each option, each combination */
+const ENT=[];CATS.forEach(c=>{ENT.push({c,sel:{},l:c.n});const na=c.attrs.slice(0,-1);
+ na.forEach(a=>a.o.forEach(o=>ENT.push({c,sel:{[a.k]:o},l:o+' '+c.n})));
+ if(na.length>1)na[0].o.forEach(x=>na[1].o.forEach(y=>ENT.push({c,sel:{[na[0].k]:x,[na[1].k]:y},l:x+' '+y+' '+c.n})));});
+/* ============ ACTIONS ============ */
+let tm;const toast=()=>{const t=$('#toast');t.classList.add('on');clearTimeout(tm);tm=setTimeout(()=>t.classList.remove('on'),1200)};
+const A={
+ cat:v=>{sheet=0;st.cat=cat(v);st.sel={};st.amt=''},
+ ent:v=>{sheet=0;const e=ENT[v];st.cat=e.c;st.sel={...e.sel};st.amt='';st.q='';$('#q').value='';$('#q').blur()},
+ pick:(v,d)=>{if(st.sel[d.k]==v)delete st.sel[d.k];else st.sel[d.k]=v},
+ reset:()=>{st.cat=null;st.sel={};st.amt=''},
+ qa:v=>st.amt=v,
+ add:()=>{if(ok()&&+st.amt>0){bill.push({c:st.cat.id,sel:{...st.sel},amt:+st.amt});rs();toast();window.scrollTo({top:0,behavior:'smooth'})}},
+ del:v=>bill.splice(v,1),
+ clear:()=>bill=[],
+ sheet:()=>{sheet=!sheet;window.scrollTo({top:0})},
+ save:()=>mod='pay',
+ print:()=>mod='rcpt',
+ m:v=>{pay.m=v;pay.paid=''},
+ fin:()=>mod='done',
+ close:()=>{if(mod=='done'){sheet=0;bill=[];cust={};pay={paid:'',m:'cash'};rs()}mod=null}
+};
+document.addEventListener('click',e=>{
+ if(e.target.id=='qx'){$('#q').value='';st.q='';render();return}
+ const el=e.target.closest('[data-a]');if(!el)return;
+ const f=A[el.dataset.a];if(f){f(el.dataset.v,el.dataset);render()}});
+document.addEventListener('input',e=>{const t=e.target,d=t.dataset;
+ if(t.id=='q'){st.q=t.value;renderRes();return}
+ if(t.id=='amt'){st.amt=t.value;const b=$('#addb');if(b)b.disabled=!(ok()&&+st.amt>0);return}
+ if(d.i!==undefined){bill[d.i].amt=t.value;renderTotals();return}
+ if(d.cu){cust[d.cu]=t.value;return}
+ if(t.id=='paid'){pay.paid=t.value;renderDiff()}});
+document.addEventListener('keydown',e=>{if(e.key=='Enter'&&e.target.id=='amt'){A.add();render()}});
+/* ============ UI PIECES ============ */
+function renderRes(){
+ const ws=st.q.toLowerCase().split(/\s+/).filter(Boolean).map(w=>w.replace(/s$/,''));
+ $('#qx').hidden=!st.q;
+ if(!ws.length){$('#res').innerHTML='';return}
+ const R=ENT.map((e,i)=>({e,i})).filter(({e})=>{const h=(e.l+' '+e.c.u).toLowerCase();return ws.every(w=>h.includes(w))}).slice(0,15);
+ $('#res').innerHTML=`<div class="rl">${R.map(({e,i})=>`<button class="rw" data-a="ent" data-v="${i}"><span>${e.c.i}</span><b>${e.l}</b><small>${e.c.u}</small></button>`).join('')||'<div class="none">No match</div>'}</div>`}
+const chips=(a,i)=>`<div class="grp"><h4><em>${i+1}</em>${a.k}</h4><div class="chips">${a.o.map(o=>`<button class="chip${st.sel[a.k]==o?' on':''}" data-a="pick" data-k="${a.k}" data-v="${o}">${o}</button>`).join('')}</div></div>`;
+/* Category photos: put an image path/URL here (e.g. nails:'img/nails.jpg'). Empty = emoji fallback. */
+const IMG={nails:'',screws:'',locks:'',hinges:'',bolts:'',nuts:''};
+const th=c=>`<span class="th">${IMG[c.id]?`<img src="${IMG[c.id]}" alt="${c.n}" loading="lazy">`:`<i>${c.i}</i>`}</span>`;
+function renderCats(){$('#cats').innerHTML=CATS.map(x=>`<button class="cb${!sheet&&st.cat&&st.cat.id==x.id?' on':''}" data-a="cat" data-v="${x.id}">${th(x)}<span>${x.n}</span></button>`).join('')}
+function renderWork(){const c=st.cat;
+ if(sheet){$('#work').innerHTML=billView();return}
+ if(!c){$('#work').innerHTML=`<div class="empty"><b>👈</b>Search above or pick a category on the left</div>`;return}
+ const sent=`<div class="sum">${c.i} <b>${c.n}</b> ${c.attrs.map(a=>st.sel[a.k]?`<span class="ok">${st.sel[a.k]}</span>`:`<span class="miss">${a.k}?</span>`).join('')}</div>`;
+ const amt=ok()?`<div class="amt"><span>Rs.</span><input id="amt" type="number" inputmode="numeric" placeholder="0" value="${st.amt}"></div>
+  <div class="chips" style="margin-top:8px">${[50,100,200,500,1000].map(n=>`<button class="chip q" data-a="qa" data-v="${n}">${n}</button>`).join('')}</div>
+  <button class="go" id="addb" data-a="add" ${+st.amt>0?'':'disabled'}>ADD TO BILL ＋</button>`
+  :`<p class="m" style="margin:12px 0 0;text-align:center">Choose all options ☝</p>`;
+ $('#work').innerHTML=`<div class="card"><h3><span>${c.i} ${c.n} <span class="u">${c.u}</span></span><button class="x" data-a="reset">✕</button></h3>${c.attrs.map(chips).join('')}${sent}${amt}</div>`}
+function renderTotals(){document.querySelectorAll('.tv').forEach(e=>e.textContent=tot());
+ $('#vb').textContent=sheet?'⬅ BACK':'🧾 VIEW BILL';
+ $('#bn').textContent=bill.length+(bill.length==1?' item':' items');$('#cnt').textContent=bill.length?bill.length+' in bill':''}
+function billView(){
+ return `<div class="card"><h3><span>🧾 Current Bill</span><button class="x" data-a="sheet">✕</button></h3>
+ <div class="items">${bill.map((b,i)=>{const c=cat(b.c);return `<div class="bi"><span class="ic">${c.i}</span><div class="bd"><b>${c.n}</b><small>${det(c,b.sel)}</small></div><button class="x" data-a="del" data-v="${i}">🗑</button><div class="ba">Rs.<input data-i="${i}" type="number" inputmode="numeric" value="${b.amt}"></div></div>`}).join('')||'<p class="m" style="text-align:center;padding:20px 0">Bill is empty.<br>Pick a category to add items.</p>'}</div>
+ <div class="tt"><span>TOTAL</span><b>Rs. <span class="tv">${tot()}</span></b></div>
+ <details ${cust.open?'open':''} ontoggle="cust.open=this.open"><summary>👤 Customer (optional)</summary><input data-cu="name" placeholder="Name" value="${cust.name||''}"><input data-cu="phone" inputmode="tel" placeholder="Phone" value="${cust.phone||''}"><input data-cu="note" placeholder="Notes" value="${cust.note||''}"></details>
+ <div class="btns"><button class="save" data-a="save" ${bill.length?'':'disabled'}>💾 SAVE BILL</button><button data-a="clear">CLEAR</button><button data-a="print" ${bill.length?'':'disabled'}>🖨 PRINT</button></div></div>`}
+const calc=()=>{const T=tot(),pd=pay.paid===''?(pay.m=='credit'?0:T):+pay.paid;return{T,pd,df:pd-T}};
+function renderDiff(){const {df}=calc(),e=$('#pdiff');if(!e)return;e.textContent=(df>=0?'CHANGE':'REMAINING')+': Rs. '+Math.abs(df);e.style.color=df>=0?'#16a34a':'#dc2626'}
+function renderModal(){const m=$('#modal');if(!mod){m.className='';m.innerHTML='';return}
+ const {T,pd,df}=calc();
+ const rc=`<div class="rcpt"><h3>🔩 HARDWARE STORE</h3><div style="text-align:center">${new Date().toLocaleString()}</div>${cust.name?`<div>${cust.name} ${cust.phone||''}</div>`:''}<hr>${bill.map(b=>{const c=cat(b.c);return `<div class="rr"><span>${c.n} – ${det(c,b.sel)}</span><b>${b.amt}</b></div>`}).join('')}<hr><div class="rr"><b>TOTAL</b><b>Rs. ${T}</b></div>${mod=='rcpt'?'':`<div class="rr"><span>Paid (${pay.m})</span><span>${pd}</span></div><div class="rr"><span>${df>=0?'Change':'Remaining'}</span><b>${Math.abs(df)}</b></div>`}</div>`;
+ m.className='open';
+ m.innerHTML=`<div class="mbox">`+(mod=='pay'
+  ?`<div class="big2">TOTAL Rs. ${T}</div>
+   <div class="pm"><button class="${pay.m=='cash'?'on':''}" data-a="m" data-v="cash">💵 Cash</button><button class="${pay.m=='credit'?'on':''}" data-a="m" data-v="credit">📒 Credit</button></div>
+   <label class="m">PAID (Rs.)</label><input id="paid" type="number" inputmode="numeric" placeholder="${pay.m=='credit'?0:T}" value="${pay.paid}" style="font-size:22px;font-weight:800">
+   <div class="big2" id="pdiff" style="margin:10px 0"></div>
+   <button class="go" data-a="fin">✔ CONFIRM & SAVE</button><button style="width:100%;margin-top:8px" data-a="close">Cancel</button>`
+  :`${mod=='done'?'<div class="big2 noprint">✅ Bill saved (prototype)</div>':''}${rc}<button class="go noprint" onclick="window.print()">🖨 PRINT</button><button class="noprint" style="width:100%;margin-top:8px" data-a="close">${mod=='done'?'NEW BILL':'Close'}</button>`)+`</div>`;
+ renderDiff()}
+function render(){renderCats();renderWork();renderRes();renderTotals();renderModal()}
+/* keep the left rail stuck just under the sticky header */
+const setHH=()=>document.documentElement.style.setProperty('--hh',document.querySelector('.top').offsetHeight+'px');
+addEventListener('resize',setHH);
+rs();render();setHH();
+</script></body></html>
