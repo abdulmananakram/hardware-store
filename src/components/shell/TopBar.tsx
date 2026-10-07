@@ -18,6 +18,8 @@ const CONFIG: Record<string, HeaderConfig> = {
   "item-edit": { title: "✏️ Edit Item", showBack: true },
   "item-detail": { title: "📦 Item Detail", showBack: true },
   "stock-adjust": { title: "⚖️ Stock Adjustment", showBack: true },
+  "category-images": { title: "🖼️ Category Images", subtitle: "Library & defaults", showBack: true },
+  "category-image-pick": { title: "🖼️ Pick Image", showBack: true },
   "sale-new": { title: "🧾 New Sale Bill", subtitle: "Quick billing" },
   "bill-history": { title: "📜 Bill History", showBack: true },
   "purchase-new": { title: "🚚 Record Purchase", showBack: true },

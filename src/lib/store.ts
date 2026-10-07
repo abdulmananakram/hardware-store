@@ -16,6 +16,7 @@ import {
   AiImportSession,
   ShopConfig,
   StockAdjustment,
+  CategoryImage,
   PaymentType,
   ScreenId,
   NavParams,
@@ -39,6 +40,7 @@ import {
   seedAiImportSessions,
   seedShopConfig,
   seedStockAdjustments,
+  seedCategoryImages,
 } from "./seed";
 
 // ============================================================
@@ -78,6 +80,36 @@ interface AppState {
   rateHistory: RateHistoryEntry[];
   aiSessions: AiImportSession[];
   stockAdjustments: StockAdjustment[];
+  categoryImages: CategoryImage[]; // library per category
+
+  // ============================================================
+  // Image library actions (per Category image library feature)
+  // ============================================================
+
+  // Upload an image file to /api/upload, return the URL. Used by all image actions.
+  uploadImageFile: (file: File) => Promise<{ ok: boolean; url?: string; error?: string }>;
+
+  // Add an existing URL (already uploaded) to a category's library
+  addImageToCategoryLibrary: (categoryId: number, url: string, makeDefault?: boolean) => CategoryImage;
+
+  // Set an image as the category's default (only one per category)
+  setCategoryDefaultImage: (categoryId: number, imageId: number) => void;
+
+  // Remove an image from the library (also clears default if it was the default)
+  deleteCategoryImage: (imageId: number) => void;
+
+  // Get the display URL for an item (priority: item.photoUrl → category default → undefined)
+  getItemImageUrl: (item: Item) => string | undefined;
+
+  // Get all images in a category's library
+  getCategoryImages: (categoryId: number) => CategoryImage[];
+
+  // Set the photoUrl on an item (e.g. when user picks from library or uploads new)
+  setItemPhoto: (itemId: number, url: string | undefined) => void;
+
+  // For new-item draft: temporarily hold the chosen photo URL until item is saved
+  draftItemPhoto: string | undefined;
+  setDraftItemPhoto: (url: string | undefined) => void;
 
   // Sale draft
   draftSale: {
@@ -127,6 +159,7 @@ interface AppState {
     lowStockThreshold: number;
     icon: string;
     initialQtyInBaseUnit: number; // opening stock (per resolution #2)
+    photoUrl?: string; // optional product image (overrides category default)
     extraUnits?: { unitName: string; conversionToBase: number }[];
   }) => Item;
   updateItem: (id: number, data: Partial<Item>) => void;
@@ -317,6 +350,135 @@ export const useApp = create<AppState>((set, get) => ({
   rateHistory: seedRateHistory,
   aiSessions: seedAiImportSessions,
   stockAdjustments: seedStockAdjustments,
+  categoryImages: seedCategoryImages,
+
+  draftItemPhoto: undefined,
+  setDraftItemPhoto: (url) => set({ draftItemPhoto: url }),
+
+  // ============================================================
+  // Image library implementations
+  // ============================================================
+
+  uploadImageFile: async (file) => {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({ message: "Upload failed" }));
+        return { ok: false, error: errBody.message || `Upload failed (${res.status})` };
+      }
+      const data = await res.json();
+      return { ok: true, url: data.url as string };
+    } catch (e: any) {
+      return { ok: false, error: e?.message || "Network error during upload" };
+    }
+  },
+
+  addImageToCategoryLibrary: (categoryId, url, makeDefault) => {
+    const ts = now();
+    const newImg: CategoryImage = {
+      id: uid(),
+      categoryId,
+      url,
+      isDefault: !!makeDefault,
+      createdAt: ts,
+    };
+    set((st) => {
+      // If makeDefault, unset other defaults in same category
+      const newImages = makeDefault
+        ? st.categoryImages.map((img) =>
+            img.categoryId === categoryId ? { ...img, isDefault: false } : img
+          )
+        : st.categoryImages;
+      // If this is the first image in the category, auto-mark as default
+      const isFirst =
+        !makeDefault &&
+        !st.categoryImages.some((img) => img.categoryId === categoryId);
+      if (isFirst) newImg.isDefault = true;
+
+      const updatedCategories = (makeDefault || isFirst)
+        ? st.categories.map((c) =>
+            c.id === categoryId
+              ? { ...c, defaultImageUrl: newImg.url, imageUrl: newImg.url, updatedAt: now() }
+              : c
+          )
+        : st.categories;
+
+      return {
+        categoryImages: [...newImages, newImg],
+        categories: updatedCategories,
+      };
+    });
+    return newImg;
+  },
+
+  setCategoryDefaultImage: (categoryId, imageId) => {
+    set((st) => {
+      const img = st.categoryImages.find((i) => i.id === imageId);
+      if (!img) return {};
+      return {
+        categoryImages: st.categoryImages.map((i) =>
+          i.categoryId === categoryId
+            ? { ...i, isDefault: i.id === imageId }
+            : i
+        ),
+        categories: st.categories.map((c) =>
+          c.id === categoryId
+            ? { ...c, defaultImageUrl: img.url, imageUrl: img.url, updatedAt: now() }
+            : c
+        ),
+      };
+    });
+  },
+
+  deleteCategoryImage: (imageId) => {
+    set((st) => {
+      const img = st.categoryImages.find((i) => i.id === imageId);
+      if (!img) return {};
+      const wasDefault = img.isDefault;
+      const remaining = st.categoryImages.filter((i) => i.id !== imageId);
+      // If deleted image was default, promote the next image in same category
+      let newDefaultUrl: string | undefined = undefined;
+      if (wasDefault) {
+        const next = remaining.find((i) => i.categoryId === img.categoryId);
+        if (next) {
+          next.isDefault = true;
+          newDefaultUrl = next.url;
+        }
+      }
+      return {
+        categoryImages: remaining,
+        categories: st.categories.map((c) =>
+          c.id === img.categoryId
+            ? {
+                ...c,
+                defaultImageUrl: newDefaultUrl,
+                imageUrl: newDefaultUrl,
+                updatedAt: now(),
+              }
+            : c
+        ),
+      };
+    });
+  },
+
+  getItemImageUrl: (item) => {
+    if (item.photoUrl) return item.photoUrl;
+    const cat = get().categories.find((c) => c.id === item.categoryId);
+    return cat?.defaultImageUrl || cat?.imageUrl;
+  },
+
+  getCategoryImages: (categoryId) =>
+    get().categoryImages.filter((i) => i.categoryId === categoryId),
+
+  setItemPhoto: (itemId, url) => {
+    set((st) => ({
+      items: st.items.map((i) =>
+        i.id === itemId ? { ...i, photoUrl: url, updatedAt: now() } : i
+      ),
+    }));
+  },
 
   draftSale: initialDraftSale,
   draftPurchase: initialDraftPurchase,
@@ -607,6 +769,7 @@ export const useApp = create<AppState>((set, get) => ({
       categoryId: data.categoryId,
       name: data.name,
       icon: data.icon,
+      photoUrl: data.photoUrl, // optional product image
       baseUnitName: data.baseUnitName,
       initialQtyInBaseUnit: data.initialQtyInBaseUnit,
       qtyInBaseUnit: data.initialQtyInBaseUnit, // current stock = opening stock at creation

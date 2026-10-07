@@ -37,6 +37,8 @@ export function BottomTabBar() {
     "item-add",
     "item-detail",
     "stock-adjust",
+    "category-images",
+    "category-image-pick",
   ];
   if (MODAL_SCREENS.includes(screen)) return null;
 

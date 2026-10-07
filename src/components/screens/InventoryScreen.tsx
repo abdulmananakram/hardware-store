@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useApp, fmtRs, stockDisplay } from "@/lib/store";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { ItemImageWithFallback } from "@/components/parts/ItemImage";
 
 export function InventoryScreen() {
   const items = useApp((s) => s.items);
@@ -85,20 +86,27 @@ export function InventoryScreen() {
         ))}
       </div>
 
-      {/* Add Item / AI Import buttons */}
-      <div className="grid grid-cols-2 gap-2 my-3">
+      {/* Add Item / AI Import / Category Images buttons */}
+      <div className="grid grid-cols-3 gap-2 my-3">
         <Button
           onClick={() => navigate("item-add")}
           className="bg-teal-600 hover:bg-teal-500 font-bold h-11"
         >
-          ➕ Add Item
+          ➕ Add
         </Button>
         <Button
           variant="outline"
           onClick={() => navigate("ai-import-list")}
           className="border-slate-200 font-bold h-11"
         >
-          🤖 AI Import
+          🤖 AI
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => navigate("category-images")}
+          className="border-violet-300 text-violet-700 hover:bg-violet-50 font-bold h-11"
+        >
+          🖼️ Images
         </Button>
       </div>
 
@@ -115,9 +123,7 @@ export function InventoryScreen() {
                 low ? "border-rose-200 bg-rose-50/30" : "border-slate-100"
               }`}
             >
-              <div className="w-12 h-12 bg-slate-50 rounded-lg flex items-center justify-center text-2xl shrink-0">
-                {it.icon}
-              </div>
+              <ItemImageWithFallback item={it} size="md" />
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-sm truncate">{it.name}</p>
                 <p className="text-[11px] text-slate-500">
@@ -141,3 +147,4 @@ export function InventoryScreen() {
     </div>
   );
 }
+

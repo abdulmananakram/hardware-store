@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useApp, fmtRs, stockDisplay } from "@/lib/store";
+import { ItemGridImage } from "@/components/parts/ItemImage";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/parts/Sheet";
@@ -145,8 +146,8 @@ export function SaleNewScreen() {
                 }}
                 className="bg-white rounded-xl p-2 shadow-sm border border-slate-100 text-left active:scale-95 transition"
               >
-                <div className="aspect-square bg-slate-50 rounded-lg flex items-center justify-center text-3xl mb-1.5">
-                  {it.icon}
+                <div className="aspect-square mb-1.5">
+                  <ItemGridImage item={it} rounded="rounded-lg" />
                 </div>
                 <p className="text-[12px] font-bold leading-tight truncate">{it.name}</p>
                 <p className="text-[10px] text-slate-500">{cat?.name}</p>

@@ -21,6 +21,8 @@ import {
   AiImportReviewScreen,
 } from "@/components/screens/AiImportScreens";
 import { CustomerCatalogScreen } from "@/components/screens/CustomerCatalogScreen";
+import { CategoryImageLibraryScreen } from "@/components/screens/CategoryImageLibraryScreen";
+import { CategoryImagePickScreen } from "@/components/screens/CategoryImagePickScreen";
 
 export default function Home() {
   const isAuthed = useApp((s) => s.isAuthed);
@@ -51,8 +53,11 @@ export default function Home() {
         {screen === "ai-import-list" && <AiImportListScreen />}
         {screen === "ai-import-review" && <AiImportReviewScreen />}
         {screen === "customer-catalog" && <CustomerCatalogScreen />}
+        {screen === "category-images" && <CategoryImageLibraryScreen />}
+        {screen === "category-image-pick" && <CategoryImagePickScreen />}
       </main>
       <BottomTabBar />
     </div>
   );
 }
+

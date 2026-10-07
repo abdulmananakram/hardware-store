@@ -12,6 +12,7 @@ import {
   AiImportSession,
   ShopConfig,
   StockAdjustment,
+  CategoryImage,
 } from "./types";
 
 // ============================================================
@@ -38,15 +39,19 @@ export const seedShopConfig: ShopConfig = {
 };
 
 export const seedCategories: Category[] = [
-  { id: 1, shopId: 1, name: "Nails", urduName: "کیل", icon: "📍", parentCategoryId: null, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
-  { id: 2, shopId: 1, name: "Screws", urduName: "پیچ", icon: "🪛", parentCategoryId: null, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
-  { id: 3, shopId: 1, name: "Locks", urduName: "تالے", icon: "🔒", parentCategoryId: null, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
-  { id: 4, shopId: 1, name: "Hinges", urduName: "قبضے", icon: "🚪", parentCategoryId: null, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
-  { id: 5, shopId: 1, name: "Bolts", urduName: "بولٹ", icon: "⚙️", parentCategoryId: null, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
-  { id: 6, shopId: 1, name: "Nuts", urduName: "نٹ", icon: "🔩", parentCategoryId: null, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
-  { id: 7, shopId: 1, name: "Tools", urduName: "اوزار", icon: "🛠️", parentCategoryId: null, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
-  { id: 8, shopId: 1, name: "Paint", urduName: "رنگ", icon: "🎨", parentCategoryId: null, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
+  { id: 1, shopId: 1, name: "Nails", urduName: "کیل", icon: "📍", parentCategoryId: null, defaultImageUrl: undefined, imageUrl: undefined, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
+  { id: 2, shopId: 1, name: "Screws", urduName: "پیچ", icon: "🪛", parentCategoryId: null, defaultImageUrl: undefined, imageUrl: undefined, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
+  { id: 3, shopId: 1, name: "Locks", urduName: "تالے", icon: "🔒", parentCategoryId: null, defaultImageUrl: undefined, imageUrl: undefined, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
+  { id: 4, shopId: 1, name: "Hinges", urduName: "قبضے", icon: "🚪", parentCategoryId: null, defaultImageUrl: undefined, imageUrl: undefined, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
+  { id: 5, shopId: 1, name: "Bolts", urduName: "بولٹ", icon: "⚙️", parentCategoryId: null, defaultImageUrl: undefined, imageUrl: undefined, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
+  { id: 6, shopId: 1, name: "Nuts", urduName: "نٹ", icon: "🔩", parentCategoryId: null, defaultImageUrl: undefined, imageUrl: undefined, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
+  { id: 7, shopId: 1, name: "Tools", urduName: "اوزار", icon: "🛠️", parentCategoryId: null, defaultImageUrl: undefined, imageUrl: undefined, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
+  { id: 8, shopId: 1, name: "Paint", urduName: "رنگ", icon: "🎨", parentCategoryId: null, defaultImageUrl: undefined, imageUrl: undefined, createdAt: daysAgo(60), updatedAt: daysAgo(60) },
 ];
+
+// Category image library — empty initially; user uploads from the Category Images screen.
+// Pre-seed one sample to demonstrate the picker (uses Next.js public placeholder).
+export const seedCategoryImages: CategoryImage[] = [];
 
 let unitIdCounter = 1000;
 const makeUnits = (baseName: string, extras: { name: string; conv: number }[] = []): ItemUnit[] => {

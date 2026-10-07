@@ -27,14 +27,26 @@ export type ReturnReason =
 export type ReturnDisposition = "back_to_sellable_stock" | "damaged_pile";
 export type AdjustmentType = "restock" | "correction" | "damage" | "loss" | "initial";
 
+// Child table — image in a category's library
+export interface CategoryImage {
+  id: number;
+  categoryId: number;
+  url: string; // e.g. "/uploads/abc123.jpg"
+  isDefault: boolean; // only one per category
+  createdAt: string;
+}
+
 // Top-level table — has shop_id + created_at + updated_at
 export interface Category {
   id: number;
   shopId: number;
   name: string;
   urduName?: string;
-  icon: string; // emoji
+  icon: string; // emoji fallback when no image
   parentCategoryId: number | null;
+  // Per-resolution: default image for category (used by items that have no own photoUrl)
+  defaultImageUrl?: string; // shortcut to library's default; can be set directly
+  imageUrl?: string; // alias kept for compat
   createdAt: string;
   updatedAt: string;
 }
@@ -274,7 +286,9 @@ export type ScreenId =
   | "ai-import-review"
   | "ai-import-list"
   | "customer-catalog"
-  | "stock-adjust";
+  | "stock-adjust"
+  | "category-images"
+  | "category-image-pick";
 
 export interface NavParams {
   itemId?: number;
@@ -285,4 +299,8 @@ export interface NavParams {
   saleBillLineId?: number;
   aiSessionId?: number;
   filterType?: "sales" | "purchases";
+  categoryId?: number; // for category-images screen
+  // Callback path: where to go after picking an image from library
+  pickForItemId?: number; // when picking image for a specific item
+  pickForNew?: boolean; // when picking image for new item draft
 }

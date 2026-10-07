@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useApp, fmtRs } from "@/lib/store";
 import { Input } from "@/components/ui/input";
+import { ItemGridImage } from "@/components/parts/ItemImage";
 
 export function CustomerCatalogScreen() {
   const items = useApp((s) => s.items);
@@ -72,8 +73,8 @@ export function CustomerCatalogScreen() {
             key={it.id}
             className="bg-white rounded-xl p-3 shadow-sm border border-slate-100 text-center"
           >
-            <div className="aspect-square bg-slate-50 rounded-lg flex items-center justify-center text-4xl mb-1.5">
-              {it.icon}
+            <div className="aspect-square mb-1.5">
+              <ItemGridImage item={it} rounded="rounded-lg" />
             </div>
             <p className="font-bold text-sm leading-tight truncate">{it.name}</p>
             <p className="text-[10px] text-slate-500">{it.baseUnitName}</p>

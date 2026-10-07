@@ -50,6 +50,14 @@ export function ItemAddEditScreen() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [err, setErr] = useState("");
 
+  // Image: either the item's own photoUrl OR the draft photo for new items
+  const draftItemPhoto = useApp((s) => s.draftItemPhoto);
+  const setDraftItemPhoto = useApp((s) => s.setDraftItemPhoto);
+  const photoUrl = editing?.photoUrl || draftItemPhoto;
+  const category = categories.find((c) => c.id === categoryId);
+  // What's currently shown (priority: item photo → category default → emoji)
+  const effectivePhotoUrl = photoUrl || category?.defaultImageUrl || category?.imageUrl;
+
   const valid =
     name.trim() &&
     categoryId &&
@@ -88,7 +96,7 @@ export function ItemAddEditScreen() {
       });
       navigate("item-detail", { itemId: editing.id });
     } else {
-      // Per resolution #2 — pass initialQtyInBaseUnit
+      // Per resolution #2 — pass initialQtyInBaseUnit + photoUrl
       addItem({
         name: name.trim(),
         urduName: urduName.trim() || undefined,
@@ -98,8 +106,10 @@ export function ItemAddEditScreen() {
         lowStockThreshold: parseFloat(threshold),
         icon,
         initialQtyInBaseUnit: parseFloat(initialQty) || 0,
+        photoUrl: draftItemPhoto, // custom photo (overrides category default)
         extraUnits,
       });
+      setDraftItemPhoto(undefined); // clear draft
       navigate("inventory");
     }
   };
@@ -118,9 +128,60 @@ export function ItemAddEditScreen() {
   return (
     <div className="px-3 pt-3 pb-32">
       <div className="space-y-3">
-        {/* Icon picker */}
+        {/* Product Photo (NEW) — pick from library, upload, or use category default */}
         <div>
-          <Label className="text-[11px] font-bold uppercase text-slate-500">Icon</Label>
+          <Label className="text-[11px] font-bold uppercase text-slate-500">Product Photo</Label>
+          <div className="flex items-center gap-3 mt-1">
+            <div className="w-20 h-20 rounded-xl bg-slate-50 border-2 border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+              {effectivePhotoUrl ? (
+                 
+                <img
+                  src={effectivePhotoUrl}
+                  alt={name || "Product photo"}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="text-4xl">{icon}</span>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <button
+                onClick={() => {
+                  if (!categoryId) {
+                    setErr("Pick a category first to choose from its library");
+                    return;
+                  }
+                  setErr("");
+                  if (editing) {
+                    navigate("category-image-pick", {
+                      categoryId,
+                      pickForItemId: editing.id,
+                    });
+                  } else {
+                    navigate("category-image-pick", { categoryId, pickForNew: true });
+                  }
+                }}
+                disabled={!categoryId}
+                className="w-full py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white font-bold text-sm rounded-lg transition active:scale-95"
+              >
+                {photoUrl ? "🖼️ Change Photo" : "🖼️ Pick / Upload Photo"}
+              </button>
+              <p className="text-[10px] text-slate-500 mt-1">
+                {photoUrl
+                  ? "Custom photo set (overrides category default)"
+                  : category?.defaultImageUrl
+                  ? "Using category default photo — tap to override"
+                  : "No photo set — emoji fallback will be used. Tap to upload."}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Icon picker (fallback emoji — used when no image) */}
+        <div>
+          <Label className="text-[11px] font-bold uppercase text-slate-500">
+            Icon (fallback when no photo)
+          </Label>
           <div className="flex flex-wrap gap-1.5 mt-1">
             {EMOJI_OPTIONS.map((e) => (
               <button

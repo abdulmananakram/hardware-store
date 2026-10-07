@@ -12,6 +12,7 @@ export function ItemDetailScreen() {
   const saleBills = useApp((s) => s.saleBills);
   const purchaseBills = useApp((s) => s.purchaseBills);
   const navigate = useApp((s) => s.navigate);
+  const getItemImageUrl = useApp((s) => s.getItemImageUrl);
 
   const item = params.itemId ? items.find((i) => i.id === params.itemId) : null;
   if (!item) {
@@ -49,8 +50,17 @@ export function ItemDetailScreen() {
         }`}
       >
         <div className="flex items-start gap-3">
-          <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center text-4xl">
-            {item.icon}
+          <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center text-4xl overflow-hidden">
+            {(() => {
+              const url = getItemImageUrl(item);
+              if (url) {
+                return (
+                   
+                  <img src={url} alt={item.name} className="w-full h-full object-cover" />
+                );
+              }
+              return <span>{item.icon}</span>;
+            })()}
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-extrabold text-lg leading-tight truncate">{item.name}</p>
