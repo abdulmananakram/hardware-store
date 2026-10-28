@@ -1,9 +1,4 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
+// Prisma schema for Hardware Shop POS & Inventory
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,20 +8,217 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model ShopConfig {
+  id                            Int      @id @default(autoincrement())
+  shopId                        Int      @default(1)
+  shopName                      String   @default("Hardware Shop")
+  itemDeletionWindowDays        Int      @default(90)
+  lowStockThresholdDefault      Int      @default(10)
+  baseUnitDefault               String   @default("Piece")
+  khataReminderThresholdDays    Int      @default(7)
+  khataReminderThresholdAmount  Float    @default(1000)
 }
 
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model Category {
+  id               Int             @id @default(autoincrement())
+  shopId           Int             @default(1)
+  name             String
+  urduName         String?
+  icon             String          @default("📦")
+  parentCategoryId Int?
+  defaultImageUrl  String?
+  imageUrl         String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  images           CategoryImage[]
+  items            Item[]
+}
+
+model CategoryImage {
+  id         Int      @id @default(autoincrement())
+  categoryId Int
+  url        String
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+}
+
+model Item {
+  id                   Int               @id @default(autoincrement())
+  shopId               Int               @default(1)
+  categoryId           Int
+  name                 String
+  urduName             String?
+  photoUrl             String?
+  icon                 String            @default("📦")
+  baseUnitName         String            @default("Piece")
+  initialQtyInBaseUnit Float             @default(0)
+  qtyInBaseUnit        Float             @default(0)
+  pricePerBaseUnit     Float
+  costPerBaseUnit      Float?
+  lowStockThreshold    Float             @default(10)
+  isActive             Boolean           @default(true)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  category             Category          @relation(fields: [categoryId], references: [id])
+  units                ItemUnit[]
+  rateHistory          RateHistory[]
+  stockAdjustments     StockAdjustment[]
+  saleLines            SaleBillLine[]
+  purchaseLines        PurchaseBillLine[]
+}
+
+model ItemUnit {
+  id               Int      @id @default(autoincrement())
+  itemId           Int
+  unitName         String
+  conversionToBase Float    @default(1)
+  isBaseUnit       Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  item             Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+}
+
+model RateHistory {
+  id        Int      @id @default(autoincrement())
+  itemId    Int
+  oldPrice  Float
+  newPrice  Float
+  changedAt DateTime @default(now())
+  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+}
+
+model StockAdjustment {
+  id              Int      @id @default(autoincrement())
+  itemId          Int
+  type            String   // restock, correction, damage, loss, initial
+  deltaInBaseUnit Float
+  newQtyInBaseUnit Float
+  reason          String
+  adjustedAt      DateTime @default(now())
+  item            Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+}
+
+model Customer {
+  id           Int      @id @default(autoincrement())
+  shopId       Int      @default(1)
+  name         String
+  phone        String?
+  khataBalance Float    @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  sales        SaleBill[]
+}
+
+model Supplier {
+  id             Int            @id @default(autoincrement())
+  shopId         Int            @default(1)
+  name           String
+  phone          String?
+  payableBalance Float          @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  purchases      PurchaseBill[]
+}
+
+model SaleBill {
+  id          Int            @id @default(autoincrement())
+  uuid        String         @unique
+  shopId      Int            @default(1)
+  customerId  Int?
+  billDate    DateTime       @default(now())
+  paymentType String         // cash, udhaar
+  totalAmount Float
+  syncStatus  String         @default("synced")
+  cancelled   Boolean        @default(false)
+  cancelReason String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  customer    Customer?      @relation(fields: [customerId], references: [id])
+  lines       SaleBillLine[]
+}
+
+model SaleBillLine {
+  id              Int      @id @default(autoincrement())
+  saleBillId      Int
+  itemId          Int
+  unitId          Int
+  qtyInSoldUnit   Float
+  qtyInBaseUnit   Float
+  unitPriceAtSale Float
+  lineTotal       Float
+  createdAt       DateTime @default(now())
+  saleBill        SaleBill @relation(fields: [saleBillId], references: [id], onDelete: Cascade)
+  item            Item     @relation(fields: [itemId], references: [id])
+  returns         Return[]
+}
+
+model PurchaseBill {
+  id           Int                @id @default(autoincrement())
+  uuid         String             @unique
+  shopId       Int                @default(1)
+  supplierId   Int
+  billDate     DateTime           @default(now())
+  paymentType  String             // cash, udhaar
+  totalAmount  Float
+  syncStatus   String             @default("synced")
+  cancelled    Boolean            @default(false)
+  cancelReason String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  supplier     Supplier           @relation(fields: [supplierId], references: [id])
+  lines        PurchaseBillLine[]
+}
+
+model PurchaseBillLine {
+  id                  Int          @id @default(autoincrement())
+  purchaseBillId      Int
+  itemId              Int
+  unitId              Int
+  qtyInPurchasedUnit  Float
+  qtyInBaseUnit       Float
+  unitCost            Float
+  costPerBaseUnit     Float
+  lineTotal           Float
+  createdAt           DateTime     @default(now())
+  purchaseBill        PurchaseBill @relation(fields: [purchaseBillId], references: [id], onDelete: Cascade)
+  item                Item         @relation(fields: [itemId], references: [id])
+}
+
+model Return {
+  id                    Int          @id @default(autoincrement())
+  saleBillLineId        Int
+  qtyReturnedInBaseUnit Float
+  reason                String
+  disposition           String
+  refundAmount          Float
+  returnDate            DateTime     @default(now())
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  saleBillLine          SaleBillLine @relation(fields: [saleBillLineId], references: [id])
+}
+
+model KhataTransaction {
+  id                    Int      @id @default(autoincrement())
+  partyType             String   // customer, supplier
+  partyId               Int
+  transactionType       String   // credit_given, payment_received, payable_incurred, payment_made
+  amount                Float
+  relatedSaleBillId     Int?
+  relatedPurchaseBillId Int?
+  relatedReturnId       Int?
+  note                  String?
+  transactionDate       DateTime @default(now())
+  createdAt             DateTime @default(now())
+}
+
+model AppNotification {
+  id                Int      @id @default(autoincrement())
+  shopId            Int      @default(1)
+  type              String   // low_stock, khata_reminder
+  message           String
+  relatedItemId     Int?
+  relatedCustomerId Int?
+  relatedSupplierId Int?
+  isRead            Boolean  @default(false)
+  createdAt         DateTime @default(now())
 }

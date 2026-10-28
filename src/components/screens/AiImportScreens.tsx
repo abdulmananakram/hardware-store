@@ -7,10 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Sheet } from "@/components/parts/Sheet";
 import { AiImportRow } from "@/lib/types";
 
-// ============================================================
-// AI Import List — start point (upload photo/PDF or use existing session)
-// ============================================================
-
 export function AiImportListScreen() {
   const aiSessions = useApp((s) => s.aiSessions);
   const createAiSession = useApp((s) => s.createAiSession);

@@ -135,6 +135,14 @@ export interface SaleBillLine {
   qtyInBaseUnit: number;
   unitPriceAtSale: number; // per base unit, snapshot
   lineTotal: number;
+  // Per hardware_shop_pos_business_rules.md:
+  isEstimatedWeight?: boolean;
+  ratePerKg?: number;
+  unroundedGrams?: number;
+  roundedGrams?: number;
+  costSnapshot?: number; // cost at time of sale
+  isBelowCost?: boolean;
+  negotiatedPrice?: number; // actual agreed unit price
   createdAt: string;
 }
 
@@ -228,6 +236,38 @@ export interface AppNotification {
   relatedCustomerId?: number;
   relatedSupplierId?: number;
   isRead: boolean;
+  createdAt: string;
+}
+
+// Child / Ledger table — Permanent Inventory Movements Ledger (Per Section 4 & 9)
+export type InventoryMovementType =
+  | "sale"
+  | "purchase"
+  | "customer_return"
+  | "supplier_return"
+  | "damage"
+  | "adjustment_pos"
+  | "adjustment_neg"
+  | "cancellation";
+
+export interface InventoryMovement {
+  id: number;
+  itemId: number;
+  type: InventoryMovementType;
+  deltaInBaseUnit: number; // positive = stock in, negative = stock out
+  newQtyInBaseUnit: number; // balance after movement
+  referenceType: "sale_bill" | "purchase_bill" | "return" | "adjustment";
+  referenceId: number;
+  note?: string;
+  createdAt: string;
+}
+
+// Audit trail for sensitive events (Section 12)
+export interface AuditLog {
+  id: number;
+  action: "below_cost_sale" | "price_override" | "cancellation" | "stock_adjustment" | "category_deleted";
+  details: string;
+  userId?: string;
   createdAt: string;
 }
 

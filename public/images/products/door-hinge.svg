@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg_hinge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="100%" stop-color="#e2e8f0"/>
+    </linearGradient>
+    <linearGradient id="hinge_plate" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#94a3b8"/>
+      <stop offset="25%" stop-color="#f8fafc"/>
+      <stop offset="60%" stop-color="#cbd5e1"/>
+      <stop offset="100%" stop-color="#64748b"/>
+    </linearGradient>
+    <linearGradient id="knuckle" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#475569"/>
+      <stop offset="40%" stop-color="#f1f5f9"/>
+      <stop offset="80%" stop-color="#64748b"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <filter id="shadow_hinge" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="3" dy="5" stdDeviation="5" flood-color="#0f172a" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+  <rect width="256" height="256" rx="32" fill="url(#bg_hinge)"/>
+  <circle cx="128" cy="128" r="90" fill="#ffffff" opacity="0.6"/>
+  <g filter="url(#shadow_hinge)">
+    <!-- Left Leaf -->
+    <path d="M50,56 L118,56 L118,200 L50,200 C46,200 42,196 42,192 L42,64 C42,60 46,56 50,56 Z" fill="url(#hinge_plate)"/>
+    <!-- Left Countersunk Screw Holes -->
+    <circle cx="76" cy="80" r="7" fill="#334155"/>
+    <circle cx="76" cy="80" r="10" fill="none" stroke="#f8fafc" stroke-width="1.5"/>
+    <circle cx="92" cy="128" r="7" fill="#334155"/>
+    <circle cx="92" cy="128" r="10" fill="none" stroke="#f8fafc" stroke-width="1.5"/>
+    <circle cx="76" cy="176" r="7" fill="#334155"/>
+    <circle cx="76" cy="176" r="10" fill="none" stroke="#f8fafc" stroke-width="1.5"/>
+
+    <!-- Right Leaf -->
+    <path d="M138,56 L206,56 C210,56 214,60 214,64 L214,192 C214,196 210,200 206,200 L138,200 Z" fill="url(#hinge_plate)"/>
+    <!-- Right Countersunk Screw Holes -->
+    <circle cx="180" cy="80" r="7" fill="#334155"/>
+    <circle cx="180" cy="80" r="10" fill="none" stroke="#f8fafc" stroke-width="1.5"/>
+    <circle cx="164" cy="128" r="7" fill="#334155"/>
+    <circle cx="164" cy="128" r="10" fill="none" stroke="#f8fafc" stroke-width="1.5"/>
+    <circle cx="180" cy="176" r="7" fill="#334155"/>
+    <circle cx="180" cy="176" r="10" fill="none" stroke="#f8fafc" stroke-width="1.5"/>
+
+    <!-- Center Knuckle / Pin Barrel -->
+    <rect x="118" y="44" width="20" height="168" rx="6" fill="url(#knuckle)"/>
+    <!-- Pin joints lines -->
+    <line x1="118" y1="84" x2="138" y2="84" stroke="#1e293b" stroke-width="2"/>
+    <line x1="118" y1="128" x2="138" y2="128" stroke="#1e293b" stroke-width="2"/>
+    <line x1="118" y1="172" x2="138" y2="172" stroke="#1e293b" stroke-width="2"/>
+    <!-- Top & bottom pin finials -->
+    <ellipse cx="128" cy="44" rx="8" ry="3" fill="#cbd5e1"/>
+    <ellipse cx="128" cy="212" rx="8" ry="3" fill="#334155"/>
+  </g>
+</svg>

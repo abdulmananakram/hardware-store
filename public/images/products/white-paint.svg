@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg_paint" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#eff6ff"/>
+      <stop offset="100%" stop-color="#dbeafe"/>
+    </linearGradient>
+    <linearGradient id="bucket_body" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="25%" stop-color="#60a5fa"/>
+      <stop offset="70%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+    <linearGradient id="lid_metal" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#94a3b8"/>
+      <stop offset="30%" stop-color="#f8fafc"/>
+      <stop offset="70%" stop-color="#cbd5e1"/>
+      <stop offset="100%" stop-color="#64748b"/>
+    </linearGradient>
+    <filter id="shadow_bucket" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="3" dy="6" stdDeviation="6" flood-color="#1e3a8a" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+  <rect width="256" height="256" rx="32" fill="url(#bg_paint)"/>
+  <circle cx="128" cy="128" r="90" fill="#ffffff" opacity="0.6"/>
+  <g filter="url(#shadow_bucket)">
+    <!-- Metal Handle Wire -->
+    <path d="M60,110 C60,40 196,40 196,110" fill="none" stroke="#94a3b8" stroke-width="4" stroke-linecap="round"/>
+    <rect x="114" y="44" width="28" height="8" rx="3" fill="#1e293b"/>
+    <!-- Bucket Lower Body (Tapered) -->
+    <path d="M68,105 L188,105 L174,212 C173,218 168,222 162,222 L94,222 C88,222 83,218 82,212 Z" fill="url(#bucket_body)"/>
+    <!-- Label Stripe on bucket -->
+    <path d="M73,142 L183,142 L179,185 L77,185 Z" fill="#ffffff" opacity="0.95"/>
+    <rect x="90" y="152" width="76" height="6" rx="2" fill="#2563eb"/>
+    <rect x="100" y="164" width="56" height="4" rx="2" fill="#94a3b8"/>
+    <text x="128" y="180" font-family="sans-serif" font-size="9" font-weight="900" fill="#1e40af" text-anchor="middle">PREMIUM 4L</text>
+    <!-- Paint Drip -->
+    <path d="M110,105 C110,120 118,124 118,128 C118,131 115,133 113,133 C111,133 108,131 108,128 C108,120 102,115 102,105 Z" fill="#ffffff"/>
+    <!-- Metal Rim / Lid Lip -->
+    <ellipse cx="128" cy="105" rx="60" ry="12" fill="url(#lid_metal)"/>
+    <ellipse cx="128" cy="103" rx="56" ry="10" fill="#f8fafc"/>
+    <ellipse cx="128" cy="103" rx="46" ry="7" fill="#ffffff"/>
+  </g>
+</svg>

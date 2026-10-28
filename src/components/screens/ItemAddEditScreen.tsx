@@ -17,6 +17,7 @@ export function ItemAddEditScreen() {
   const updateItem = useApp((s) => s.updateItem);
   const softDeleteItem = useApp((s) => s.softDeleteItem);
   const addCategory = useApp((s) => s.addCategory);
+  const deleteCategory = useApp((s) => s.deleteCategory);
   const shopConfig = useApp((s) => s.shopConfig);
   const navigate = useApp((s) => s.navigate);
 
@@ -48,6 +49,7 @@ export function ItemAddEditScreen() {
   const [newCatName, setNewCatName] = useState("");
   const [newCatIcon, setNewCatIcon] = useState("📦");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [catDeleteErr, setCatDeleteErr] = useState("");
   const [err, setErr] = useState("");
 
   // Image: either the item's own photoUrl OR the draft photo for new items
@@ -83,6 +85,34 @@ export function ItemAddEditScreen() {
       ) {
         return;
       }
+      const baseUnit = editing.units.find((u) => u.isBaseUnit) || {
+        id: Date.now(),
+        itemId: editing.id,
+        unitName: baseUnitName.trim(),
+        conversionToBase: 1,
+        isBaseUnit: true,
+        createdAt: new Date().toISOString(),
+      };
+      const updatedBaseUnit = {
+        ...baseUnit,
+        unitName: baseUnitName.trim(),
+      };
+      const validExtras = extraUnits.filter((u) => u.unitName.trim().length > 0);
+      const updatedExtraUnits = validExtras.map((u, idx) => {
+        const existingUnit = editing.units.find(
+          (eu) => !eu.isBaseUnit && eu.unitName.toLowerCase() === u.unitName.trim().toLowerCase()
+        );
+        return {
+          id: existingUnit ? existingUnit.id : Date.now() + idx + 1,
+          itemId: editing.id,
+          unitName: u.unitName.trim(),
+          conversionToBase: u.conversionToBase > 0 ? u.conversionToBase : 1,
+          isBaseUnit: false,
+          createdAt: existingUnit ? existingUnit.createdAt : new Date().toISOString(),
+        };
+      });
+      const finalUnits = [updatedBaseUnit, ...updatedExtraUnits];
+
       updateItem(editing.id, {
         name: name.trim(),
         urduName: urduName.trim() || undefined,
@@ -92,7 +122,7 @@ export function ItemAddEditScreen() {
         pricePerBaseUnit: newPrice,
         costPerBaseUnit: cost ? parseFloat(cost) : undefined,
         lowStockThreshold: parseFloat(threshold),
-        units: editing.units.map((u) => u), // existing units kept
+        units: finalUnits,
       });
       navigate("item-detail", { itemId: editing.id });
     } else {
@@ -235,19 +265,40 @@ export function ItemAddEditScreen() {
           </div>
           <div className="flex flex-wrap gap-1.5 mt-1">
             {categories.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => setCategoryId(c.id)}
-                className={`px-3 py-1.5 rounded-lg border-2 text-sm font-bold transition ${
-                  categoryId === c.id
-                    ? "bg-teal-50 border-teal-500 text-teal-700"
-                    : "border-slate-200 text-slate-600"
-                }`}
-              >
-                {c.icon} {c.name}
-              </button>
+              <div key={c.id} className="relative group inline-flex">
+                <button
+                  onClick={() => { setCategoryId(c.id); setCatDeleteErr(""); }}
+                  className={`pl-3 pr-7 py-1.5 rounded-lg border-2 text-sm font-bold transition ${
+                    categoryId === c.id
+                      ? "bg-teal-50 border-teal-500 text-teal-700"
+                      : "border-slate-200 text-slate-600"
+                  }`}
+                >
+                  {c.icon} {c.name}
+                </button>
+                {/* Delete button — always visible, small red ✕ */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const res = deleteCategory(c.id);
+                    if (!res.ok) {
+                      setCatDeleteErr(res.error || "Cannot delete category");
+                    } else {
+                      setCatDeleteErr("");
+                      if (categoryId === c.id) setCategoryId(null);
+                    }
+                  }}
+                  title="Delete category"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-bold text-red-400 hover:bg-red-100 hover:text-red-600 transition"
+                >
+                  ✕
+                </button>
+              </div>
             ))}
           </div>
+          {catDeleteErr && (
+            <p className="text-[11px] text-red-600 mt-1">{catDeleteErr}</p>
+          )}
         </div>
 
         {/* Base unit */}

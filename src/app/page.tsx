@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useApp } from "@/lib/store";
 import { TopBar } from "@/components/shell/TopBar";
 import { BottomTabBar } from "@/components/shell/BottomTabBar";
@@ -25,8 +26,21 @@ import { CategoryImageLibraryScreen } from "@/components/screens/CategoryImageLi
 import { CategoryImagePickScreen } from "@/components/screens/CategoryImagePickScreen";
 
 export default function Home() {
+  const [mounted, setMounted] = useState(false);
   const isAuthed = useApp((s) => s.isAuthed);
   const screen = useApp((s) => s.screen);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-[#f1f5f4] flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   if (!isAuthed || screen === "login") {
     return <LoginScreen />;

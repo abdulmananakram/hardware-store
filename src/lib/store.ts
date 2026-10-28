@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import {
   Category,
   Item,
@@ -26,6 +27,8 @@ import {
   ReturnDisposition,
   AdjustmentType,
   SyncStatus,
+  InventoryMovement,
+  AuditLog,
 } from "./types";
 import {
   seedCategories,
@@ -42,6 +45,15 @@ import {
   seedStockAdjustments,
   seedCategoryImages,
 } from "./seed";
+import {
+  round2,
+  computeBalance,
+  toBase,
+  canDeleteCategory,
+  calculateEstimatedWeightSale,
+  calculateWeightedAverageCost,
+  checkBelowCost,
+} from "./business";
 
 // ============================================================
 // Store shape
@@ -81,6 +93,8 @@ interface AppState {
   aiSessions: AiImportSession[];
   stockAdjustments: StockAdjustment[];
   categoryImages: CategoryImage[]; // library per category
+  inventoryMovements: InventoryMovement[]; // Permanent inventory ledger (Section 4 & 9)
+  auditLogs: AuditLog[]; // Audit trail (Section 12)
 
   // ============================================================
   // Image library actions (per Category image library feature)
@@ -121,9 +135,22 @@ interface AppState {
       unitId: number;
       qty: number;
       lineTotal: number;
+      customUnitPrice?: number;
+      isEstimatedWeight?: boolean;
+      ratePerKg?: number;
+      unroundedGrams?: number;
+      roundedGrams?: number;
+      isBelowCost?: boolean;
+      warning?: string;
     }[];
   };
-  draftSaleAddLine: (itemId: number, unitId: number, qty: number) => { ok: boolean; error?: string };
+  draftSaleAddLine: (
+    itemId: number,
+    unitId: number,
+    qty: number,
+    customUnitPrice?: number,
+    estimatedWeight?: { ratePerKg: number; saleAmount: number }
+  ) => { ok: boolean; error?: string; warning?: string };
   draftSaleRemoveLine: (tempId: string) => void;
   draftSaleSetCustomer: (id: number | null) => void;
   draftSaleSetPayment: (t: PaymentType) => void;
@@ -175,6 +202,7 @@ interface AppState {
 
   // Category CRUD
   addCategory: (name: string, icon: string) => Category;
+  deleteCategory: (id: number) => { ok: boolean; error?: string };
 
   // Customer / Supplier
   addCustomer: (name: string, phone?: string) => { ok: boolean; customer?: Customer; warning?: string };
@@ -250,34 +278,6 @@ const generateUuid = () =>
     return v.toString(16);
   });
 
-// Per resolution #5 — money rounding rule: round to 2 decimals
-const round2 = (n: number) => Math.round(n * 100) / 100;
-
-// Recompute customer/supplier balance from the ledger (cached on the entity)
-const computeBalance = (
-  txns: KhataTransaction[],
-  partyType: PartyType,
-  partyId: number
-): number => {
-  let bal = 0;
-  for (const t of txns) {
-    if (t.partyType !== partyType || t.partyId !== partyId) continue;
-    if (t.transactionType === "credit_given" || t.transactionType === "payable_incurred") {
-      bal += t.amount;
-    } else {
-      bal -= t.amount;
-    }
-  }
-  return round2(bal);
-};
-
-// Convert sold/purchased qty to base
-const toBase = (item: Item, unitId: number, qty: number): number => {
-  const u = item.units.find((x) => x.id === unitId);
-  if (!u) return qty;
-  return round2(qty * u.conversionToBase);
-};
-
 // ============================================================
 // Store
 // ============================================================
@@ -294,19 +294,21 @@ const initialDraftPurchase = {
   lines: [],
 };
 
-export const useApp = create<AppState>((set, get) => ({
-  isAuthed: false,
-  login: (pin) => {
-    if (pin === "1234" || pin === "") {
-      set({ isAuthed: true });
-      return true;
-    }
-    return false;
-  },
+export const useApp = create<AppState>()(
+  persist(
+    (set, get) => ({
+      isAuthed: false,
+      login: (pin) => {
+        if (pin === "1234") {
+          set({ isAuthed: true, screen: "dashboard" });
+          return true;
+        }
+        return false;
+      },
 
-  screen: "login",
-  params: {},
-  history: [],
+      screen: "dashboard",
+      params: {},
+      history: [],
   navigate: (screen, params = {}) =>
     set((s) => ({
       screen,
@@ -351,6 +353,8 @@ export const useApp = create<AppState>((set, get) => ({
   aiSessions: seedAiImportSessions,
   stockAdjustments: seedStockAdjustments,
   categoryImages: seedCategoryImages,
+  inventoryMovements: [],
+  auditLogs: [],
 
   draftItemPhoto: undefined,
   setDraftItemPhoto: (url) => set({ draftItemPhoto: url }),
@@ -449,6 +453,9 @@ export const useApp = create<AppState>((set, get) => ({
       }
       return {
         categoryImages: remaining,
+        items: st.items.map((it) =>
+          it.photoUrl === img.url ? { ...it, photoUrl: undefined, updatedAt: now() } : it
+        ),
         categories: st.categories.map((c) =>
           c.id === img.categoryId
             ? {
@@ -483,30 +490,89 @@ export const useApp = create<AppState>((set, get) => ({
   draftSale: initialDraftSale,
   draftPurchase: initialDraftPurchase,
 
-  draftSaleAddLine: (itemId, unitId, qty) => {
+  draftSaleAddLine: (itemId, unitId, qty, customUnitPrice, estimatedWeight) => {
     const state = get();
     const item = state.items.find((i) => i.id === itemId);
     if (!item) return { ok: false, error: "Item not found" };
-    const qtyBase = toBase(item, unitId, qty);
-    if (qtyBase > item.qtyInBaseUnit) {
+
+    let qtyBase = 0;
+    let lineTotal = 0;
+    let isEstimatedWeight = false;
+    let ratePerKg: number | undefined = undefined;
+    let unroundedGrams: number | undefined = undefined;
+    let roundedGrams: number | undefined = undefined;
+    let warning: string | undefined = undefined;
+    let isBelowCost = false;
+
+    if (estimatedWeight) {
+      // Amount-based estimated-weight sale (Section 5 & Acceptance Tests 4, 5, 6)
+      if (estimatedWeight.saleAmount <= 0) return { ok: false, error: "Enter a valid sale amount" };
+      if (estimatedWeight.ratePerKg <= 0) return { ok: false, error: "Rate per kg must be greater than zero" };
+
+      const calc = calculateEstimatedWeightSale(estimatedWeight.saleAmount, estimatedWeight.ratePerKg);
+      unroundedGrams = calc.unroundedGrams;
+      roundedGrams = calc.roundedGrams;
+      lineTotal = calc.lineTotal;
+      isEstimatedWeight = true;
+      ratePerKg = estimatedWeight.ratePerKg;
+
+      const isKgBase = item.baseUnitName.toLowerCase() === "kg" || item.baseUnitName.toLowerCase() === "kilogram";
+      qtyBase = isKgBase ? round2(roundedGrams / 1000) : roundedGrams;
+
+      const itemCostPerKg = isKgBase ? (item.costPerBaseUnit || 0) : ((item.costPerBaseUnit || 0) * 1000);
+      const costCheck = checkBelowCost(estimatedWeight.ratePerKg, itemCostPerKg);
+      isBelowCost = costCheck.isBelowCost;
+      if (costCheck.isBelowCost) warning = costCheck.warning;
+    } else {
+      if (!qty || qty <= 0 || isNaN(qty)) return { ok: false, error: "Enter a valid quantity" };
+      qtyBase = toBase(item, unitId, qty);
+      const unitPrice = customUnitPrice !== undefined && customUnitPrice >= 0 ? customUnitPrice : item.pricePerBaseUnit;
+      lineTotal = round2(qtyBase * unitPrice);
+
+      const costCheck = checkBelowCost(unitPrice, item.costPerBaseUnit);
+      isBelowCost = costCheck.isBelowCost;
+      if (costCheck.isBelowCost) warning = costCheck.warning;
+    }
+
+    // Check existing quantity of this item already in current sale cart
+    const inCartBase = state.draftSale.lines
+      .filter((l) => l.itemId === itemId)
+      .reduce((sum, l) => sum + (l.isEstimatedWeight ? (l.roundedGrams ?? l.qty) : toBase(item, l.unitId, l.qty)), 0);
+    const totalRequestedBase = round2(inCartBase + qtyBase);
+
+    if (totalRequestedBase > item.qtyInBaseUnit) {
       const u = item.units.find((x) => x.id === unitId);
-      const availSold = item.qtyInBaseUnit / (u?.conversionToBase || 1);
+      const remainingBase = Math.max(0, item.qtyInBaseUnit - inCartBase);
+      const availSold = remainingBase / (u?.conversionToBase || 1);
       return {
         ok: false,
-        error: `Only ${Math.floor(availSold)} ${u?.unitName || item.baseUnitName} available`,
+        error: `Only ${Math.floor(availSold)} ${u?.unitName || item.baseUnitName} more available (already ${inCartBase} in cart)`,
       };
     }
-    const lineTotal = round2(qtyBase * item.pricePerBaseUnit);
+
     set((s) => ({
       draftSale: {
         ...s.draftSale,
         lines: [
           ...s.draftSale.lines,
-          { tempId: tempId(), itemId, unitId, qty, lineTotal },
+          {
+            tempId: tempId(),
+            itemId,
+            unitId,
+            qty: isEstimatedWeight ? (roundedGrams ?? qty) : qty,
+            lineTotal,
+            customUnitPrice,
+            isEstimatedWeight,
+            ratePerKg,
+            unroundedGrams,
+            roundedGrams,
+            isBelowCost,
+            warning,
+          },
         ],
       },
     }));
-    return { ok: true };
+    return { ok: true, warning };
   },
   draftSaleRemoveLine: (tid) =>
     set((s) => ({
@@ -531,13 +597,14 @@ export const useApp = create<AppState>((set, get) => ({
       billDate: now(),
       paymentType: s.draftSale.paymentType,
       totalAmount: total,
-      // Per resolution #1: pending status until POST /sales succeeds
       syncStatus: "pending",
       createdAt: now(),
       updatedAt: now(),
       lines: s.draftSale.lines.map((l) => {
         const item = s.items.find((x) => x.id === l.itemId)!;
-        const qtyBase = toBase(item, l.unitId, l.qty);
+        const qtyBase = l.isEstimatedWeight
+          ? (item.baseUnitName.toLowerCase() === "kg" ? round2((l.roundedGrams || 0) / 1000) : (l.roundedGrams || 0))
+          : toBase(item, l.unitId, l.qty);
         return {
           id: uid(),
           saleBillId: billId,
@@ -545,14 +612,21 @@ export const useApp = create<AppState>((set, get) => ({
           unitId: l.unitId,
           qtyInSoldUnit: l.qty,
           qtyInBaseUnit: qtyBase,
-          unitPriceAtSale: item.pricePerBaseUnit,
+          unitPriceAtSale: l.customUnitPrice ?? item.pricePerBaseUnit,
           lineTotal: l.lineTotal,
+          isEstimatedWeight: l.isEstimatedWeight,
+          ratePerKg: l.ratePerKg,
+          unroundedGrams: l.unroundedGrams,
+          roundedGrams: l.roundedGrams,
+          costSnapshot: item.costPerBaseUnit,
+          isBelowCost: l.isBelowCost,
+          negotiatedPrice: l.customUnitPrice,
           createdAt: now(),
         };
       }),
     };
 
-    // Atomic update: deduct stock + add bill + khata entry + low-stock check
+    // Atomic update: deduct stock + add bill + khata entry + low-stock check + inventory movements + audit
     set((st) => {
       const newItems = st.items.map((it) => {
         const deducted = bill.lines
@@ -561,6 +635,45 @@ export const useApp = create<AppState>((set, get) => ({
         if (deducted === 0) return it;
         return { ...it, qtyInBaseUnit: round2(it.qtyInBaseUnit - deducted), updatedAt: now() };
       });
+
+      // Record permanent inventory ledger movement for each line
+      const newMovements: InventoryMovement[] = bill.lines.map((l) => {
+        const it = newItems.find((x) => x.id === l.itemId)!;
+        return {
+          id: uid(),
+          itemId: l.itemId,
+          type: "sale" as const,
+          deltaInBaseUnit: -l.qtyInBaseUnit,
+          newQtyInBaseUnit: it.qtyInBaseUnit,
+          referenceType: "sale_bill" as const,
+          referenceId: bill.id,
+          note: l.isEstimatedWeight
+            ? `Estimated weight sale (${l.roundedGrams}g deducted, rounded from ${l.unroundedGrams}g)`
+            : `Sale of ${l.qtyInSoldUnit}`,
+          createdAt: now(),
+        };
+      });
+
+      // Audit below cost and price overrides
+      const newAuditLogs = [...st.auditLogs];
+      for (const l of bill.lines) {
+        if (l.isBelowCost) {
+          newAuditLogs.unshift({
+            id: uid(),
+            action: "below_cost_sale" as const,
+            details: `Sale #${bill.id} item #${l.itemId} sold below cost (sold at Rs. ${l.unitPriceAtSale}, cost: Rs. ${l.costSnapshot || 0})`,
+            createdAt: now(),
+          });
+        }
+        if (l.negotiatedPrice !== undefined) {
+          newAuditLogs.unshift({
+            id: uid(),
+            action: "price_override" as const,
+            details: `Sale #${bill.id} item #${l.itemId} negotiated price Rs. ${l.negotiatedPrice}`,
+            createdAt: now(),
+          });
+        }
+      }
 
       const newKhata =
         bill.paymentType === "udhaar" && bill.customerId
@@ -572,7 +685,7 @@ export const useApp = create<AppState>((set, get) => ({
                 partyId: bill.customerId,
                 transactionType: "credit_given" as KhataTxnType,
                 amount: bill.totalAmount,
-                relatedSaleBillId: bill.id, // explicit FK (per resolution #6)
+                relatedSaleBillId: bill.id,
                 transactionDate: now(),
                 createdAt: now(),
               },
@@ -608,6 +721,8 @@ export const useApp = create<AppState>((set, get) => ({
       return {
         saleBills: [bill, ...st.saleBills],
         items: newItems,
+        inventoryMovements: [...newMovements, ...st.inventoryMovements],
+        auditLogs: newAuditLogs,
         khataTransactions: newKhata,
         customers: newCustomers,
         notifications: newNotifs,
@@ -696,12 +811,35 @@ export const useApp = create<AppState>((set, get) => ({
           .filter((l) => l.itemId === it.id)
           .reduce((sum, l) => sum + l.qtyInBaseUnit, 0);
         if (added === 0) return it;
-        const newCost = bill.lines.find((l) => l.itemId === it.id)?.costPerBaseUnit;
+        const lineCost = bill.lines.find((l) => l.itemId === it.id)?.costPerBaseUnit ?? it.costPerBaseUnit ?? 0;
+        // Per Section 6 & Acceptance Test 14: Weighted-Average Costing
+        const newCost = calculateWeightedAverageCost(
+          it.qtyInBaseUnit,
+          it.costPerBaseUnit || lineCost,
+          added,
+          lineCost
+        );
         return {
           ...it,
           qtyInBaseUnit: round2(it.qtyInBaseUnit + added),
-          costPerBaseUnit: newCost ?? it.costPerBaseUnit,
+          costPerBaseUnit: newCost,
           updatedAt: now(),
+        };
+      });
+
+      // Permanent inventory ledger movement for each purchase line
+      const newMovements: InventoryMovement[] = bill.lines.map((l) => {
+        const it = newItems.find((x) => x.id === l.itemId)!;
+        return {
+          id: uid(),
+          itemId: l.itemId,
+          type: "purchase" as const,
+          deltaInBaseUnit: l.qtyInBaseUnit,
+          newQtyInBaseUnit: it.qtyInBaseUnit,
+          referenceType: "purchase_bill" as const,
+          referenceId: bill.id,
+          note: `Received purchase from supplier #${bill.supplierId}`,
+          createdAt: now(),
         };
       });
 
@@ -731,6 +869,7 @@ export const useApp = create<AppState>((set, get) => ({
       return {
         purchaseBills: [bill, ...st.purchaseBills],
         items: newItems,
+        inventoryMovements: [...newMovements, ...st.inventoryMovements],
         khataTransactions: newKhata,
         suppliers: newSuppliers,
         draftPurchase: { ...initialDraftPurchase },
@@ -894,8 +1033,30 @@ export const useApp = create<AppState>((set, get) => ({
           });
         }
       }
+
+      const movement: InventoryMovement = {
+        id: uid(),
+        itemId,
+        type: deltaInBaseUnit >= 0 ? "adjustment_pos" : "adjustment_neg",
+        deltaInBaseUnit,
+        newQtyInBaseUnit: newQty,
+        referenceType: "adjustment",
+        referenceId: adjustment.id,
+        note: `Physical count adjustment (${type}): ${reason}`,
+        createdAt: now(),
+      };
+
+      const audit: AuditLog = {
+        id: uid(),
+        action: "stock_adjustment",
+        details: `Stock adjusted for item #${itemId} by ${deltaInBaseUnit} base units (${type}). Reason: ${reason}`,
+        createdAt: now(),
+      };
+
       return {
         stockAdjustments: [adjustment, ...st.stockAdjustments],
+        inventoryMovements: [movement, ...st.inventoryMovements],
+        auditLogs: [audit, ...st.auditLogs],
         items: newItems,
         notifications: newNotifs,
       };
@@ -916,6 +1077,14 @@ export const useApp = create<AppState>((set, get) => ({
     };
     set((s) => ({ categories: [...s.categories, c] }));
     return c;
+  },
+
+  deleteCategory: (id) => {
+    const s = get();
+    const check = canDeleteCategory(s.items, id);
+    if (!check.ok) return check;
+    set((st) => ({ categories: st.categories.filter((c) => c.id !== id) }));
+    return { ok: true };
   },
 
   addCustomer: (name, phone) => {
@@ -1078,9 +1247,22 @@ export const useApp = create<AppState>((set, get) => ({
           : c
       );
 
+      const movement: InventoryMovement = {
+        id: uid(),
+        itemId: line.itemId,
+        type: disposition === "back_to_sellable_stock" ? "customer_return" : "damage",
+        deltaInBaseUnit: disposition === "back_to_sellable_stock" ? qtyReturnedInBaseUnit : 0,
+        newQtyInBaseUnit: newItems.find((i) => i.id === line.itemId)?.qtyInBaseUnit ?? 0,
+        referenceType: "return",
+        referenceId: ret.id,
+        note: `Customer return (${reason}): ${disposition === "back_to_sellable_stock" ? "restored to stock" : "damaged/written off"}`,
+        createdAt: now(),
+      };
+
       return {
         returns: [ret, ...st.returns],
         items: newItems,
+        inventoryMovements: [movement, ...st.inventoryMovements],
         khataTransactions: newKhata,
         customers: newCustomers,
       };
@@ -1094,18 +1276,64 @@ export const useApp = create<AppState>((set, get) => ({
     if (!bill) return { ok: false, error: "Bill not found" };
     if (bill.cancelled) return { ok: false, error: "Already cancelled" };
 
+    // Check which lines have already been returned
+    const lineReturnedMap = new Map<number, number>();
+    for (const line of bill.lines) {
+      const alreadyReturned = s.returns
+        .filter((r) => r.saleBillLineId === line.id)
+        .reduce((sum, r) => sum + r.qtyReturnedInBaseUnit, 0);
+      lineReturnedMap.set(line.id, alreadyReturned);
+    }
+
     set((st) => {
       const newItems = st.items.map((it) => {
+        // Only restore unreturned quantities!
         const restored = bill.lines
           .filter((l) => l.itemId === it.id)
-          .reduce((sum, l) => sum + l.qtyInBaseUnit, 0);
+          .reduce((sum, l) => {
+            const alreadyReturned = lineReturnedMap.get(l.id) || 0;
+            const remainingToRestore = Math.max(0, l.qtyInBaseUnit - alreadyReturned);
+            return sum + remainingToRestore;
+          }, 0);
         if (restored === 0) return it;
         return { ...it, qtyInBaseUnit: round2(it.qtyInBaseUnit + restored), updatedAt: now() };
       });
 
+      // Permanent inventory ledger entries for cancellation
+      const cancelMovements: InventoryMovement[] = bill.lines.map((l) => {
+        const alreadyReturned = lineReturnedMap.get(l.id) || 0;
+        const restored = Math.max(0, l.qtyInBaseUnit - alreadyReturned);
+        const it = newItems.find((i) => i.id === l.itemId)!;
+        return {
+          id: uid(),
+          itemId: l.itemId,
+          type: "cancellation" as const,
+          deltaInBaseUnit: restored,
+          newQtyInBaseUnit: it.qtyInBaseUnit,
+          referenceType: "sale_bill" as const,
+          referenceId: bill.id,
+          note: `Restored from cancelled bill #${bill.id}: ${reason}`,
+          createdAt: now(),
+        };
+      });
+
+      const cancelAudit: AuditLog = {
+        id: uid(),
+        action: "cancellation",
+        details: `Sale bill #${bill.id} cancelled. Reason: ${reason}`,
+        createdAt: now(),
+      };
+
+      // Calculate already refunded amount to avoid double-crediting customer
+      const alreadyRefundedAmount = bill.lines.reduce((sum, l) => {
+        const returned = lineReturnedMap.get(l.id) || 0;
+        return sum + (returned * l.unitPriceAtSale);
+      }, 0);
+      const remainingAmountToReverse = round2(Math.max(0, bill.totalAmount - alreadyRefundedAmount));
+
       let newKhata = st.khataTransactions;
       let newCustomers = st.customers;
-      if (bill.paymentType === "udhaar" && bill.customerId) {
+      if (bill.paymentType === "udhaar" && bill.customerId && remainingAmountToReverse > 0) {
         newKhata = [
           ...st.khataTransactions,
           {
@@ -1113,9 +1341,9 @@ export const useApp = create<AppState>((set, get) => ({
             partyType: "customer" as PartyType,
             partyId: bill.customerId,
             transactionType: "payment_received" as KhataTxnType,
-            amount: bill.totalAmount,
+            amount: remainingAmountToReverse,
             relatedSaleBillId: bill.id,
-            note: `Reversal — bill cancelled: ${reason}`,
+            note: `Reversal — bill cancelled: ${reason}${alreadyRefundedAmount > 0 ? ` (net of Rs. ${alreadyRefundedAmount} already returned)` : ""}`,
             transactionDate: now(),
             createdAt: now(),
           },
@@ -1132,6 +1360,8 @@ export const useApp = create<AppState>((set, get) => ({
           b.id === id ? { ...b, cancelled: true, cancelReason: reason, updatedAt: now() } : b
         ),
         items: newItems,
+        inventoryMovements: [...cancelMovements, ...st.inventoryMovements],
+        auditLogs: [cancelAudit, ...st.auditLogs],
         khataTransactions: newKhata,
         customers: newCustomers,
       };
@@ -1392,7 +1622,31 @@ export const useApp = create<AppState>((set, get) => ({
     computeBalance(get().khataTransactions, "customer", customerId),
   supplierBalance: (supplierId) =>
     computeBalance(get().khataTransactions, "supplier", supplierId),
-}));
+    }),
+    {
+      name: "hardware_shop_storage_v1",
+      partialize: (state) => ({
+        isAuthed: state.isAuthed,
+        shopConfig: state.shopConfig,
+        categories: state.categories,
+        items: state.items,
+        customers: state.customers,
+        suppliers: state.suppliers,
+        saleBills: state.saleBills,
+        purchaseBills: state.purchaseBills,
+        returns: state.returns,
+        khataTransactions: state.khataTransactions,
+        notifications: state.notifications,
+        rateHistory: state.rateHistory,
+        aiSessions: state.aiSessions,
+        stockAdjustments: state.stockAdjustments,
+        categoryImages: state.categoryImages,
+        inventoryMovements: state.inventoryMovements,
+        auditLogs: state.auditLogs,
+      }),
+    }
+  )
+);
 
 // ============================================================
 // Misc helpers (pure, exported separately)

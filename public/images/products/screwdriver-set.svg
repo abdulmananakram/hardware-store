@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg_driver" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fff1f2"/>
+      <stop offset="100%" stop-color="#ffe4e6"/>
+    </linearGradient>
+    <linearGradient id="driver_steel" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#cbd5e1"/>
+      <stop offset="35%" stop-color="#f8fafc"/>
+      <stop offset="70%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <linearGradient id="red_handle" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#991b1b"/>
+      <stop offset="35%" stop-color="#ef4444"/>
+      <stop offset="70%" stop-color="#dc2626"/>
+      <stop offset="100%" stop-color="#7f1d1d"/>
+    </linearGradient>
+    <filter id="shadow_driver" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="3" dy="6" stdDeviation="5" flood-color="#881337" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+  <rect width="256" height="256" rx="32" fill="url(#bg_driver)"/>
+  <circle cx="128" cy="128" r="90" fill="#ffffff" opacity="0.6"/>
+  <g filter="url(#shadow_driver)">
+    <!-- Screwdriver 1 (Flat head - angled) -->
+    <g transform="rotate(-30 110 130)">
+      <!-- Shaft -->
+      <rect x="105" y="45" width="10" height="95" fill="url(#driver_steel)"/>
+      <!-- Magnetic tip -->
+      <rect x="104" y="32" width="12" height="15" fill="#1e293b"/>
+      <polygon points="104,32 116,32 114,24 106,24" fill="#0f172a"/>
+      <!-- Handle Bolster -->
+      <path d="M100,135 L120,135 L124,148 L96,148 Z" fill="#0f172a"/>
+      <!-- Handle Main Grip -->
+      <rect x="94" y="148" width="32" height="68" rx="8" fill="url(#red_handle)"/>
+      <rect x="102" y="152" width="16" height="60" rx="4" fill="#1e293b" opacity="0.8"/>
+    </g>
+    <!-- Screwdriver 2 (Cross / Phillips) -->
+    <g transform="rotate(25 150 130)">
+      <!-- Shaft -->
+      <rect x="145" y="55" width="8" height="85" fill="url(#driver_steel)"/>
+      <!-- Phillips tip -->
+      <polygon points="144,45 154,45 149,34" fill="#0f172a"/>
+      <!-- Handle Bolster -->
+      <path d="M141,135 L157,135 L160,146 L138,146 Z" fill="#0f172a"/>
+      <!-- Handle Main Grip -->
+      <rect x="136" y="146" width="26" height="60" rx="7" fill="#0f766e"/>
+      <rect x="143" y="150" width="12" height="52" rx="3" fill="#1e293b" opacity="0.8"/>
+    </g>
+  </g>
+</svg>

@@ -25,8 +25,12 @@ export function DashboardScreen() {
     (i) => i.isActive && i.qtyInBaseUnit <= i.lowStockThreshold
   );
 
-  const totalReceivable = customers.reduce((s, c) => s + c.khataBalance, 0);
-  const totalPayable = suppliers.reduce((s, sp) => s + sp.payableBalance, 0);
+  const totalReceivable = customers
+    .filter((c) => c.khataBalance > 0)
+    .reduce((s, c) => s + c.khataBalance, 0);
+  const totalPayable = suppliers
+    .filter((sp) => sp.payableBalance > 0)
+    .reduce((s, sp) => s + sp.payableBalance, 0);
   const unreadNotifs = notifications.filter((n) => !n.isRead).length;
 
   const recentBills = saleBills.slice(0, 5);

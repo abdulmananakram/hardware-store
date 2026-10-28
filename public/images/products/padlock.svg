@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg_lock" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f0fdf4"/>
+      <stop offset="100%" stop-color="#dcfce7"/>
+    </linearGradient>
+    <linearGradient id="brass_body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="30%" stop-color="#eab308"/>
+      <stop offset="70%" stop-color="#ca8a04"/>
+      <stop offset="100%" stop-color="#854d0e"/>
+    </linearGradient>
+    <linearGradient id="chrome" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#94a3b8"/>
+      <stop offset="35%" stop-color="#ffffff"/>
+      <stop offset="70%" stop-color="#cbd5e1"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <filter id="shadow_lock" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="3" dy="6" stdDeviation="6" flood-color="#064e3b" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+  <rect width="256" height="256" rx="32" fill="url(#bg_lock)"/>
+  <circle cx="128" cy="128" r="90" fill="#ffffff" opacity="0.6"/>
+  <g filter="url(#shadow_lock)">
+    <!-- Steel Shackle -->
+    <path d="M84,120 L84,80 C84,55 104,36 128,36 C152,36 172,55 172,80 L172,120"
+          fill="none" stroke="url(#chrome)" stroke-width="22" stroke-linecap="round"/>
+    <!-- Padlock Solid Brass Body -->
+    <rect x="68" y="112" width="120" height="96" rx="16" fill="url(#brass_body)"/>
+    <!-- Bevel highlight -->
+    <rect x="74" y="118" width="108" height="84" rx="10" fill="none" stroke="#fef9c3" stroke-width="2" opacity="0.6"/>
+    <!-- Keyhole -->
+    <circle cx="128" cy="150" r="10" fill="#451a03"/>
+    <polygon points="124,154 132,154 134,176 122,176" fill="#451a03"/>
+    <!-- Brass rivets / brand plate -->
+    <circle cx="82" cy="126" r="3" fill="#78350f"/>
+    <circle cx="174" cy="126" r="3" fill="#78350f"/>
+    <circle cx="82" cy="194" r="3" fill="#78350f"/>
+    <circle cx="174" cy="194" r="3" fill="#78350f"/>
+  </g>
+</svg>

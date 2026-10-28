@@ -30,16 +30,13 @@ export function ItemImage({ item, size = "md", className = "", rounded }: ItemIm
   const imgClass = `${rounded || classes.img} ${className} object-cover shrink-0`;
 
   if (imageUrl) {
-    // Use Next.js Image if available; here plain img for simplicity
     return (
-       
       <img
         src={imageUrl}
         alt={item.name}
         className={imgClass}
         loading="lazy"
         onError={(e) => {
-          // Hide broken image, show fallback emoji via parent
           (e.currentTarget as HTMLImageElement).style.display = "none";
           const fallback = (e.currentTarget.parentElement?.querySelector(".emoji-fallback") as HTMLElement);
           if (fallback) fallback.style.display = "flex";
@@ -50,7 +47,11 @@ export function ItemImage({ item, size = "md", className = "", rounded }: ItemIm
 
   return (
     <div className={boxClass}>
-      <span className={classes.emoji}>{item.icon}</span>
+      {item.icon && item.icon.startsWith("/") ? (
+        <img src={item.icon} alt="" className="w-3/4 h-3/4 object-contain" />
+      ) : (
+        <span className={classes.emoji}>{item.icon}</span>
+      )}
     </div>
   );
 }
@@ -66,14 +67,17 @@ export function ItemImageWithFallback({ item, size = "md", className = "", round
   if (!imageUrl) {
     return (
       <div className={boxClass}>
-        <span className={classes.emoji}>{item.icon}</span>
+        {item.icon && item.icon.startsWith("/") ? (
+          <img src={item.icon} alt="" className="w-3/4 h-3/4 object-contain" />
+        ) : (
+          <span className={classes.emoji}>{item.icon}</span>
+        )}
       </div>
     );
   }
 
   return (
     <div className={boxClass}>
-      { }
       <img
         src={imageUrl}
         alt={item.name}
@@ -84,7 +88,11 @@ export function ItemImageWithFallback({ item, size = "md", className = "", round
         }}
       />
       <span className={`emoji-fallback ${classes.emoji}`} style={{ display: "none" }}>
-        {item.icon}
+        {item.icon && item.icon.startsWith("/") ? (
+          <img src={item.icon} alt="" className="w-3/4 h-3/4 object-contain" />
+        ) : (
+          item.icon
+        )}
       </span>
     </div>
   );
@@ -101,14 +109,17 @@ export function ItemGridImage({ item, rounded = "rounded-lg" }: { item: Item; ro
   if (!imageUrl) {
     return (
       <div className={boxClass}>
-        <span className="text-3xl">{item.icon}</span>
+        {item.icon && item.icon.startsWith("/") ? (
+          <img src={item.icon} alt="" className="w-3/5 h-3/5 object-contain" />
+        ) : (
+          <span className="text-3xl">{item.icon}</span>
+        )}
       </div>
     );
   }
 
   return (
     <div className={boxClass}>
-      { }
       <img
         src={imageUrl}
         alt={item.name}
@@ -119,7 +130,11 @@ export function ItemGridImage({ item, rounded = "rounded-lg" }: { item: Item; ro
         }}
       />
       <span className="emoji-fallback text-3xl" style={{ display: "none" }}>
-        {item.icon}
+        {item.icon && item.icon.startsWith("/") ? (
+          <img src={item.icon} alt="" className="w-3/5 h-3/5 object-contain" />
+        ) : (
+          item.icon
+        )}
       </span>
     </div>
   );

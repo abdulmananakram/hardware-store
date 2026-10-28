@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
+  experimental: {
+    agentUpgrade: "security",
+  },
 };
 
 export default nextConfig;

@@ -37,7 +37,7 @@ export function SuppliersScreen() {
           Total Payable
         </p>
         <p className="text-3xl font-extrabold">
-          {fmtRs(suppliers.reduce((s, sp) => sp.payableBalance + s, 0))}
+          {fmtRs(suppliers.filter((sp) => sp.payableBalance > 0).reduce((s, sp) => sp.payableBalance + s, 0))}
         </p>
         <p className="text-xs opacity-90 mt-0.5">{suppliers.length} suppliers</p>
       </div>
@@ -57,7 +57,7 @@ export function SuppliersScreen() {
               className="w-full flex items-center gap-3 text-left"
             >
               <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shrink-0 ${
-                sp.payableBalance > 0 ? "bg-orange-100 text-orange-700" : "bg-slate-100 text-slate-600"
+                sp.payableBalance > 0 ? "bg-orange-100 text-orange-700" : sp.payableBalance < 0 ? "bg-teal-100 text-teal-700" : "bg-slate-100 text-slate-600"
               }`}>
                 {sp.name[0]?.toUpperCase()}
               </div>
@@ -72,6 +72,13 @@ export function SuppliersScreen() {
                       {fmtRs(sp.payableBalance)}
                     </p>
                     <p className="text-[10px] text-slate-500">you owe</p>
+                  </>
+                ) : sp.payableBalance < 0 ? (
+                  <>
+                    <p className="font-extrabold text-teal-600 text-sm">
+                      {fmtRs(Math.abs(sp.payableBalance))}
+                    </p>
+                    <p className="text-[10px] text-teal-700 font-semibold">advance paid</p>
                   </>
                 ) : (
                   <p className="text-[11px] text-emerald-600 font-bold">✓ Settled</p>

@@ -45,7 +45,7 @@ export function CustomersScreen() {
           Total Receivable
         </p>
         <p className="text-3xl font-extrabold">
-          {fmtRs(customers.reduce((s, c) => s + c.khataBalance, 0))}
+          {fmtRs(customers.filter((c) => c.khataBalance > 0).reduce((s, c) => s + c.khataBalance, 0))}
         </p>
         <p className="text-xs opacity-90 mt-0.5">{customers.length} customers</p>
       </div>
@@ -68,7 +68,7 @@ export function CustomersScreen() {
               className="w-full flex items-center gap-3 text-left"
             >
               <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shrink-0 ${
-                c.khataBalance > 0 ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-600"
+                c.khataBalance > 0 ? "bg-rose-100 text-rose-700" : c.khataBalance < 0 ? "bg-teal-100 text-teal-700" : "bg-slate-100 text-slate-600"
               }`}>
                 {c.name[0]?.toUpperCase()}
               </div>
@@ -83,6 +83,13 @@ export function CustomersScreen() {
                       {fmtRs(c.khataBalance)}
                     </p>
                     <p className="text-[10px] text-slate-500">owes you</p>
+                  </>
+                ) : c.khataBalance < 0 ? (
+                  <>
+                    <p className="font-extrabold text-teal-600 text-sm">
+                      {fmtRs(Math.abs(c.khataBalance))}
+                    </p>
+                    <p className="text-[10px] text-teal-700 font-semibold">advance / credit</p>
                   </>
                 ) : (
                   <p className="text-[11px] text-emerald-600 font-bold">✓ Settled</p>

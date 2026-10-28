@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="100%" height="100%">
+  <!-- Hammer Icon -->
+  <g transform="rotate(-40 32 32)">
+    <rect x="30" y="20" width="4" height="40" rx="1.5" fill="#334155"/>
+    <rect x="29" y="36" width="6" height="22" rx="2" fill="#0f766e"/>
+    <rect x="26" y="14" width="12" height="10" rx="1.5" fill="#94a3b8"/>
+    <rect x="38" y="15" width="8" height="8" rx="1" fill="#cbd5e1"/>
+    <path d="M26,14 C16,14 12,20 10,26 C13,23 20,21 26,22 Z" fill="#64748b"/>
+  </g>
+</svg>

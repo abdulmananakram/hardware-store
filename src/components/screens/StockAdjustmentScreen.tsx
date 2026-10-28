@@ -30,6 +30,7 @@ export function StockAdjustmentScreen() {
 
   const item = params.itemId ? items.find((i) => i.id === params.itemId) : null;
   const [type, setType] = useState<AdjustmentType | null>(null);
+  const [corrDirection, setCorrDirection] = useState<"add" | "sub">("sub");
   const [deltaStr, setDeltaStr] = useState("");
   const [reason, setReason] = useState("");
   const [confirm, setConfirm] = useState(false);
@@ -49,7 +50,11 @@ export function StockAdjustmentScreen() {
 
   const delta = parseFloat(deltaStr) || 0;
   const signedDelta =
-    type && (type === "damage" || type === "loss") ? -Math.abs(delta) : Math.abs(delta);
+    type === "damage" || type === "loss"
+      ? -Math.abs(delta)
+      : type === "correction"
+      ? (corrDirection === "sub" ? -Math.abs(delta) : Math.abs(delta))
+      : Math.abs(delta);
   const newQty = Math.round((item.qtyInBaseUnit + signedDelta) * 100) / 100;
 
   const itemAdjustments = stockAdjustments
@@ -144,6 +149,32 @@ export function StockAdjustmentScreen() {
 
       {type && (
         <>
+          {type === "correction" && (
+            <div className="flex gap-2 mb-3">
+              <button
+                type="button"
+                onClick={() => setCorrDirection("add")}
+                className={`flex-1 py-2 text-xs font-bold rounded-lg border-2 transition ${
+                  corrDirection === "add"
+                    ? "bg-emerald-50 border-emerald-500 text-emerald-800"
+                    : "border-slate-200 bg-white text-slate-600"
+                }`}
+              >
+                ➕ Found more (+)
+              </button>
+              <button
+                type="button"
+                onClick={() => setCorrDirection("sub")}
+                className={`flex-1 py-2 text-xs font-bold rounded-lg border-2 transition ${
+                  corrDirection === "sub"
+                    ? "bg-rose-50 border-rose-500 text-rose-800"
+                    : "border-slate-200 bg-white text-slate-600"
+                }`}
+              >
+                ➖ Counted less (-)
+              </button>
+            </div>
+          )}
           <div>
             <Label className="text-[11px] font-bold uppercase text-slate-500">
               Quantity (in {item.baseUnitName})
