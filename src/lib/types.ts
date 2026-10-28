@@ -335,6 +335,8 @@ export interface ShopConfig {
   baseUnitDefault: string; // default "Piece"
   khataReminderThresholdDays: number; // bills older than this trigger reminder (default 7)
   khataReminderThresholdAmount: number; // balances above this trigger reminder (default 1000)
+  language?: "en" | "ur";
+  billRoundingEnabled?: boolean;
 }
 
 // ============================================================
@@ -362,7 +364,8 @@ export type ScreenId =
   | "customer-catalog"
   | "stock-adjust"
   | "category-images"
-  | "category-image-pick";
+  | "category-image-pick"
+  | "reports";
 
 export interface NavParams {
   itemId?: number;

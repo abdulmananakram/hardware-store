@@ -271,11 +271,12 @@ model PurchaseBillLine {
   createdAt                DateTime     @default(now())
   purchaseBill             PurchaseBill @relation(fields: [purchaseBillId], references: [id], onDelete: Cascade)
   item                     Item         @relation(fields: [itemId], references: [id])
+  returns                  Return[]
 }
 
 model Return {
   id                    Int          @id @default(autoincrement())
-  saleBillLineId        Int
+  saleBillLineId        Int?
   purchaseBillLineId    Int?
   qtyReturnedInBaseUnit Float
   reason                String
@@ -284,7 +285,8 @@ model Return {
   returnDate            DateTime     @default(now())
   createdAt             DateTime     @default(now())
   updatedAt             DateTime     @updatedAt
-  saleBillLine          SaleBillLine @relation(fields: [saleBillLineId], references: [id])
+  saleBillLine          SaleBillLine? @relation(fields: [saleBillLineId], references: [id])
+  purchaseBillLine      PurchaseBillLine? @relation(fields: [purchaseBillLineId], references: [id])
 }
 
 model KhataTransaction {

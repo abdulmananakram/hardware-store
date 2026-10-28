@@ -3,13 +3,18 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireAuth } from "@/server/auth";
 import { errorResponse } from "@/server/api";
-import { createCustomerReturn } from "@/server/services/returnService";
+import { createCustomerReturn, createSupplierReturn } from "@/server/services/returnService";
 
 const schema = z.object({
   saleBillLineId: z.number().int().positive(),
   qtyReturnedInBaseUnit: z.number().positive(),
   reason: z.string().min(1),
   disposition: z.enum(["back_to_sellable_stock", "damaged_pile"]),
+});
+const supplierSchema = z.object({
+  purchaseBillLineId: z.number().int().positive(),
+  qtyReturnedInBaseUnit: z.number().positive(),
+  reason: z.string().min(1),
 });
 
 export async function GET(request: NextRequest) {
@@ -21,7 +26,13 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const authError = requireAuth(request);
   if (authError) return authError;
-  const parsed = schema.safeParse(await request.json().catch(() => null));
+  const body = await request.json().catch(() => null);
+  const supplier = supplierSchema.safeParse(body);
+  if (supplier.success) {
+    try { return NextResponse.json(await createSupplierReturn(supplier.data), { status: 201 }); }
+    catch (error) { return errorResponse(error); }
+  }
+  const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: true, message: parsed.error.message }, { status: 400 });
   try {
     return NextResponse.json(await createCustomerReturn(parsed.data), { status: 201 });
@@ -29,4 +40,3 @@ export async function POST(request: NextRequest) {
     return errorResponse(error);
   }
 }
-

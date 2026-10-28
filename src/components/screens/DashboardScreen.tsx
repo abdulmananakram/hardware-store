@@ -138,7 +138,7 @@ export function DashboardScreen() {
       </div>
 
       {/* Quick actions */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-4 gap-2">
         <Button
           variant="outline"
           onClick={() => navigate("purchase-new")}
@@ -162,6 +162,14 @@ export function DashboardScreen() {
         >
           <span className="text-xl">🛍️</span>
           <span className="text-[11px] font-semibold">Price List</span>
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => navigate("reports")}
+          className="h-auto py-3 flex flex-col gap-1 border-slate-200"
+        >
+          <span className="text-xl">📊</span>
+          <span className="text-[11px] font-semibold">Reports</span>
         </Button>
       </div>
 

@@ -20,6 +20,19 @@ Money and quantities remain decimal values at the application boundary for
 this migration. Existing `round2` and business-rule helpers are retained;
 fixed-point storage will be finalized with the M2/M4 sale and payment models.
 
+## M5-M9 operational defaults — 2026-10-29
+
+- Partial payments are allocated oldest outstanding bill first unless explicit
+  bill allocations are supplied. Overpayment is rejected; advances are not
+  created.
+- Purchase freight is included in landed cost and discounts reduce landed
+  cost. The API stores both the subtotal and adjustment components.
+- Reports are generated from the server ledger and can be printed/shared as
+  styled browser output. This avoids claiming Urdu PDF shaping support from a
+  library that is not bundled.
+- The server is an optional sync target. `SYNC_TOKEN` protects sync when
+  configured; the local PWA remains the primary working store.
+
 ## M1 authentication choice — 2026-10-29
 
 The owner PIN is stored on the device as a salted SHA-256 verifier. The salt

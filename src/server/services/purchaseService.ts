@@ -86,6 +86,7 @@ export const createPurchase = async (input: CreatePurchaseInput) =>
 
     const subtotal = round2(prepared.reduce((sum, line) => sum + line.lineTotal, 0));
     const total = round2(subtotal - (input.discountAmount ?? 0) + (input.freightAmount ?? 0));
+    const landedFactor = subtotal > 0 ? total / subtotal : 1;
     const payment = normalizePayment(total, input.paymentType, input.amountPaid);
     const bill = await tx.purchaseBill.create({
       data: {
@@ -122,7 +123,7 @@ export const createPurchase = async (input: CreatePurchaseInput) =>
           qtyInPurchasedUnit: line.qty,
           qtyInBaseUnit: line.qtyInBaseUnit,
           unitCost: line.unitCost,
-          costPerBaseUnit: line.costPerBaseUnit,
+          costPerBaseUnit: round2(line.costPerBaseUnit * landedFactor),
           lineTotal: line.lineTotal,
           conversionToBaseSnapshot: line.qtyInBaseUnit / line.qty,
         },
@@ -137,7 +138,7 @@ export const createPurchase = async (input: CreatePurchaseInput) =>
           referenceId: bill.id,
           referenceUuid: bill.uuid,
           reason: "Purchase received",
-          costSnapshot: line.costPerBaseUnit,
+          costSnapshot: round2(line.costPerBaseUnit * landedFactor),
         },
       });
     }

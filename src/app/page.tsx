@@ -24,6 +24,7 @@ import {
 import { CustomerCatalogScreen } from "@/components/screens/CustomerCatalogScreen";
 import { CategoryImageLibraryScreen } from "@/components/screens/CategoryImageLibraryScreen";
 import { CategoryImagePickScreen } from "@/components/screens/CategoryImagePickScreen";
+import { ReportsScreen } from "@/components/screens/ReportsScreen";
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
@@ -72,6 +73,7 @@ export default function Home() {
         {screen === "customer-catalog" && <CustomerCatalogScreen />}
         {screen === "category-images" && <CategoryImageLibraryScreen />}
         {screen === "category-image-pick" && <CategoryImagePickScreen />}
+        {screen === "reports" && <ReportsScreen />}
       </main>
       <BottomTabBar />
     </div>
