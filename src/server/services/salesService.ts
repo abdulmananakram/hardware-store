@@ -13,13 +13,15 @@ type SaleLineInput = {
   unitId: number;
   qty: number;
   unitPrice?: number;
+  saleMode?: "QTY" | "PACK" | "WEIGHT" | "AMOUNT_EST";
+  measuredWeight?: number;
   estimatedWeight?: { ratePerKg: number; saleAmount: number };
 };
 
 export type CreateSaleInput = {
   uuid: string;
   customerId?: number | null;
-  paymentType: "cash" | "udhaar";
+  paymentType: "cash" | "udhaar" | "partial";
   amountPaid?: number;
   paymentMethod?: string;
   lines: SaleLineInput[];
@@ -68,9 +70,10 @@ export const createSale = async (input: CreateSaleInput) =>
 
       let qtyInBaseUnit: number;
       let lineTotal: number;
-      let saleMode = "quantity";
+      let saleMode = line.saleMode ?? (item.saleMode || "QTY");
       let estimated: Partial<(typeof prepared)[number]> = {};
-      if (line.estimatedWeight) {
+      if (line.estimatedWeight || saleMode === "AMOUNT_EST") {
+        if (!line.estimatedWeight) throw new ServiceError("Estimated sale requires amount and rate");
         const result = calculateEstimatedWeightSale(
           line.estimatedWeight.saleAmount,
           line.estimatedWeight.ratePerKg
@@ -80,7 +83,7 @@ export const createSale = async (input: CreateSaleInput) =>
             ? round2(result.roundedGrams / 1000)
             : result.roundedGrams;
         lineTotal = result.lineTotal;
-        saleMode = "estimated_weight";
+        saleMode = "AMOUNT_EST";
         estimated = {
           isEstimatedWeight: true,
           ratePerKg: line.estimatedWeight.ratePerKg,
@@ -92,6 +95,9 @@ export const createSale = async (input: CreateSaleInput) =>
         const price = line.unitPrice ?? item.pricePerBaseUnit;
         if (!Number.isFinite(price) || price < 0) {
           throw new ServiceError("Sale price cannot be negative");
+        }
+        if (saleMode === "WEIGHT") {
+          assertPositive(line.measuredWeight ?? 0, "Measured weight");
         }
         qtyInBaseUnit = toBase(
           {
@@ -107,9 +113,9 @@ export const createSale = async (input: CreateSaleInput) =>
             })),
           },
           line.unitId,
-          line.qty
+          saleMode === "WEIGHT" ? line.measuredWeight! : line.qty
         );
-        lineTotal = round2(line.qty * price);
+        lineTotal = round2((saleMode === "WEIGHT" ? line.measuredWeight! : line.qty) * price);
         estimated = {
           isEstimatedWeight: false,
           negotiatedPrice: line.unitPrice === undefined ? undefined : price,
@@ -144,7 +150,9 @@ export const createSale = async (input: CreateSaleInput) =>
       });
     }
 
-    const total = round2(prepared.reduce((sum, line) => sum + line.lineTotal, 0));
+    const subtotal = round2(prepared.reduce((sum, line) => sum + line.lineTotal, 0));
+    const total = Math.round(subtotal);
+    const roundingAdjustment = round2(total - subtotal);
     const payment = normalizePayment(total, input.paymentType, input.amountPaid);
     if (payment.outstandingAmount > 0 && !input.customerId) {
       throw new ServiceError("A customer is required for unpaid or partial sales");
@@ -160,6 +168,8 @@ export const createSale = async (input: CreateSaleInput) =>
         customerId: input.customerId ?? null,
         paymentType: input.paymentType,
         totalAmount: total,
+        subtotalAmount: subtotal,
+        roundingAdjustment,
         ...payment,
         paymentMethod: input.paymentMethod,
         lines: { create: [] },
@@ -192,7 +202,7 @@ export const createSale = async (input: CreateSaleInput) =>
           ratePerKg: line.ratePerKg,
           unroundedGrams: line.unroundedGrams,
           roundedGrams: line.roundedGrams,
-          roundingPolicyVersion: line.roundingPolicyVersion,
+          roundingPolicyVersion: line.roundingPolicyVersion ?? (line.saleMode === "AMOUNT_EST" ? "v1_nearest_10g_half_up" : undefined),
           costSnapshot: line.costSnapshot,
           negotiatedPrice: line.negotiatedPrice,
         },

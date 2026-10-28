@@ -10,6 +10,8 @@ const lineSchema = z.object({
   unitId: z.number().int().positive(),
   qty: z.number().positive(),
   unitPrice: z.number().nonnegative().optional(),
+  saleMode: z.enum(["QTY", "PACK", "WEIGHT", "AMOUNT_EST"]).optional(),
+  measuredWeight: z.number().positive().optional(),
   estimatedWeight: z.object({
     ratePerKg: z.number().positive(),
     saleAmount: z.number().positive(),
@@ -18,7 +20,7 @@ const lineSchema = z.object({
 const schema = z.object({
   uuid: z.string().uuid(),
   customerId: z.number().int().positive().nullable().optional(),
-  paymentType: z.enum(["cash", "udhaar"]),
+  paymentType: z.enum(["cash", "udhaar", "partial"]),
   amountPaid: z.number().nonnegative().optional(),
   paymentMethod: z.string().optional(),
   lines: z.array(lineSchema).min(1),
@@ -41,4 +43,3 @@ export async function POST(request: NextRequest) {
     return errorResponse(error);
   }
 }
-

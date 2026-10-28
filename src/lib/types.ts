@@ -11,7 +11,7 @@
 //   - /sync/push is just a batch wrapper around the same POST endpoints
 // ============================================================
 
-export type PaymentType = "cash" | "udhaar";
+export type PaymentType = "cash" | "udhaar" | "partial";
 export type SyncStatus = "pending" | "syncing" | "synced" | "failed";
 export type PartyType = "customer" | "supplier";
 export type KhataTxnType =
@@ -183,6 +183,8 @@ export interface SaleBill {
   billDate: string;
   paymentType: PaymentType;
   totalAmount: number;
+  subtotalAmount?: number;
+  roundingAdjustment?: number;
   syncStatus: SyncStatus;
   cancelled?: boolean;
   cancelReason?: string;
@@ -216,6 +218,8 @@ export interface PurchaseBill {
   billDate: string;
   paymentType: PaymentType;
   totalAmount: number;
+  subtotalAmount?: number;
+  roundingAdjustment?: number;
   syncStatus: SyncStatus;
   cancelled?: boolean;
   cancelReason?: string;

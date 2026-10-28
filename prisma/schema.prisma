@@ -17,6 +17,7 @@ model ShopConfig {
   baseUnitDefault              String @default("Piece")
   khataReminderThresholdDays   Int    @default(7)
   khataReminderThresholdAmount Float  @default(1000)
+  billRoundingEnabled           Boolean              @default(true)
 }
 
 model Category {
@@ -186,6 +187,8 @@ model SaleBill {
   billDate          DateTime       @default(now())
   paymentType       String // cash, udhaar
   totalAmount       Float
+  subtotalAmount     Float              @default(0)
+  roundingAdjustment Float              @default(0)
   amountPaid        Float          @default(0)
   outstandingAmount Float          @default(0)
   paymentStatus     String         @default("unpaid")
@@ -231,6 +234,8 @@ model PurchaseBill {
   billDate          DateTime           @default(now())
   paymentType       String // cash, udhaar
   totalAmount       Float
+  subtotalAmount     Float              @default(0)
+  roundingAdjustment Float              @default(0)
   amountPaid        Float              @default(0)
   outstandingAmount Float              @default(0)
   paymentStatus     String             @default("unpaid")

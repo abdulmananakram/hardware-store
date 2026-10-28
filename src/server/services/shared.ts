@@ -40,4 +40,3 @@ export const assertPositive = (value: number, label: string) => {
     throw new ServiceError(`${label} must be greater than zero`);
   }
 };
-
