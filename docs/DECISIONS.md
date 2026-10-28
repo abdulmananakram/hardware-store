@@ -40,3 +40,18 @@ and verifier are stored in the local database, never in the JavaScript bundle.
 The first run requires the owner to set a PIN. This is appropriate for the
 single-owner, single-device threat model; a platform secure enclave is outside
 the current web/PWA scope.
+
+## Task 1 offline authority — 2026-10-29
+
+- Dexie/IndexedDB is the device source of truth. Domain transaction functions
+ live in `src/lib/localServices.ts` and do not import React or call `fetch`.
+- Dexie schema version 2 adds payments and idempotency indexes without clearing
+ version 1 data.
+- Local services round monetary values to paisa precision with the existing
+ `round2` helper and keep estimated stock deductions in integer grams.
+- Server hydration remains compatibility-only; local mutations do not wait for
+ server availability. Background sync uses asynchronous `fetch`, never
+ synchronous XHR.
+- The supplied handoff attachment was not available as a readable workspace
+ file during this run; the requirements in the task message were treated as
+ the owner decisions.

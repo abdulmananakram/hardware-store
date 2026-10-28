@@ -31,6 +31,7 @@ import {
   SaleMode,
   CatalogueAttribute,
   CatalogueAttributeOption,
+  LocalPayment,
 } from "./types";
 import { loadLocalSnapshot, saveLocalSnapshot } from "./localDb";
 import { hasLocalPin, setLocalPin, verifyLocalPin } from "./localAuth";
@@ -43,6 +44,12 @@ import {
   calculateWeightedAverageCost,
   checkBelowCost,
 } from "./business";
+import {
+  createLocalPurchase,
+  createLocalSale,
+  createLocalStockAdjustment,
+  recordLocalPayment,
+} from "./localServices";
 
 // ============================================================
 // Store shape
@@ -90,6 +97,7 @@ interface AppState {
   auditLogs: AuditLog[]; // Audit trail (Section 12)
   attributes: CatalogueAttribute[];
   attributeOptions: CatalogueAttributeOption[];
+  payments: LocalPayment[];
 
   // ============================================================
   // Image library actions (per Category image library feature)
@@ -283,25 +291,6 @@ const defaultShopConfig: ShopConfig = {
   khataReminderThresholdAmount: 1000,
 };
 
-const syncRequest = (
-  method: string,
-  url: string,
-  body?: unknown
-): { status: number; data: unknown } => {
-  const request = new XMLHttpRequest();
-  request.open(method, url, false);
-  request.setRequestHeader("Content-Type", "application/json");
-  request.withCredentials = true;
-  request.send(body === undefined ? undefined : JSON.stringify(body));
-  let data: unknown = undefined;
-  try {
-    data = request.responseText ? JSON.parse(request.responseText) : undefined;
-  } catch {
-    data = undefined;
-  }
-  return { status: request.status, data };
-};
-
 // Per resolution #1 — client-generated UUID for idempotency
 const generateUuid = () =>
   "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -382,6 +371,7 @@ export const useApp = create<AppState>()(
             auditLogs: payload.auditLogs ?? [],
             attributes: payload.attributes ?? [],
             attributeOptions: payload.attributeOptions ?? [],
+            payments: payload.payments ?? [],
           });
           return true;
         } catch (error) {
@@ -440,6 +430,7 @@ export const useApp = create<AppState>()(
   auditLogs: [],
   attributes: [],
   attributeOptions: [],
+  payments: [],
 
   draftItemPhoto: undefined,
   setDraftItemPhoto: (url) => set({ draftItemPhoto: url }),
@@ -465,23 +456,7 @@ export const useApp = create<AppState>()(
   },
 
   addImageToCategoryLibrary: (categoryId, url, makeDefault) => {
-    if (typeof XMLHttpRequest !== "undefined") {
-      try {
-        const response = syncRequest("POST", "/api/category-images", {
-          categoryId,
-          url,
-          makeDefault,
-        });
-        if (response.status >= 200 && response.status < 300) {
-          const image = response.data as CategoryImage;
-          void get().hydrateFromServer();
-          return image;
-        }
-        console.error("Category image creation failed", response.data);
-      } catch (error) {
-        console.error("Category image creation failed", error);
-      }
-    }
+    
     const ts = now();
     const newImg: CategoryImage = {
       id: uid(),
@@ -520,21 +495,7 @@ export const useApp = create<AppState>()(
   },
 
   setCategoryDefaultImage: (categoryId, imageId) => {
-    if (typeof XMLHttpRequest !== "undefined") {
-      try {
-        const response = syncRequest("PATCH", "/api/category-images", {
-          categoryId,
-          imageId,
-        });
-        if (response.status >= 200 && response.status < 300) {
-          void get().hydrateFromServer();
-          return;
-        }
-        console.error("Category image update failed", response.data);
-      } catch (error) {
-        console.error("Category image update failed", error);
-      }
-    }
+    
     set((st) => {
       const img = st.categoryImages.find((i) => i.id === imageId);
       if (!img) return {};
@@ -554,18 +515,7 @@ export const useApp = create<AppState>()(
   },
 
   deleteCategoryImage: (imageId) => {
-    if (typeof XMLHttpRequest !== "undefined") {
-      try {
-        const response = syncRequest("DELETE", `/api/category-images?id=${imageId}`);
-        if (response.status >= 200 && response.status < 300) {
-          void get().hydrateFromServer();
-          return;
-        }
-        console.error("Category image deletion failed", response.data);
-      } catch (error) {
-        console.error("Category image deletion failed", error);
-      }
-    }
+    
     set((st) => {
       const img = st.categoryImages.find((i) => i.id === imageId);
       if (!img) return {};
@@ -609,18 +559,7 @@ export const useApp = create<AppState>()(
     get().categoryImages.filter((i) => i.categoryId === categoryId),
 
   setItemPhoto: (itemId, url) => {
-    if (typeof XMLHttpRequest !== "undefined") {
-      try {
-        const response = syncRequest("PATCH", `/api/items/${itemId}`, { photoUrl: url });
-        if (response.status >= 200 && response.status < 300) {
-          void get().hydrateFromServer();
-          return;
-        }
-        console.error("Item photo update failed", response.data);
-      } catch (error) {
-        console.error("Item photo update failed", error);
-      }
-    }
+    
     set((st) => ({
       items: st.items.map((i) =>
         i.id === itemId ? { ...i, photoUrl: url, updatedAt: now() } : i
@@ -874,6 +813,22 @@ export const useApp = create<AppState>()(
     });
 
     // Per resolution #1: immediately try POST /sales if online (single canonical flow)
+    void createLocalSale({
+      uuid: billUuid,
+      customerId: bill.customerId,
+      paymentType: bill.paymentType,
+      amountPaid: bill.amountPaid,
+      lines: bill.lines.map((line) => ({
+        itemId: line.itemId,
+        unitId: line.unitId,
+        qty: line.qtyInSoldUnit,
+        unitPrice: line.negotiatedPrice,
+        saleMode: line.saleMode,
+        estimatedWeight: line.isEstimatedWeight && line.ratePerKg
+          ? { ratePerKg: line.ratePerKg, saleAmount: line.lineTotal }
+          : undefined,
+      })),
+    }).catch((error) => console.error("Local sale transaction failed", error));
     if (get().isOnline) get().pushBill(billUuid);
 
     return bill;
@@ -1016,25 +971,25 @@ export const useApp = create<AppState>()(
       };
     });
 
+    void createLocalPurchase({
+      uuid: billUuid,
+      supplierId: bill.supplierId,
+      paymentType: bill.paymentType,
+      amountPaid: bill.amountPaid,
+      lines: bill.lines.map((line) => ({
+        itemId: line.itemId,
+        unitId: line.unitId,
+        qty: line.qtyInPurchasedUnit,
+        unitCost: line.unitCost,
+      })),
+    }).catch((error) => console.error("Local purchase transaction failed", error));
     if (get().isOnline) get().pushBill(billUuid);
     return bill;
   },
 
   // Per resolution #2 — addItem now takes initialQtyInBaseUnit
   addItem: (data) => {
-    if (typeof XMLHttpRequest !== "undefined") {
-      try {
-        const response = syncRequest("POST", "/api/items", data);
-        if (response.status >= 200 && response.status < 300) {
-          const item = response.data as Item;
-          set((st) => ({ items: [...st.items, item] }));
-          void get().hydrateFromServer();
-          return item;
-        }
-      } catch (error) {
-        console.error("Item creation failed", error);
-      }
-    }
+    
     const id = uid();
     const ts = now();
     const baseUnit: ItemUnit = {
@@ -1104,23 +1059,7 @@ export const useApp = create<AppState>()(
     if (!existing) return;
     const oldPrice = existing.pricePerBaseUnit;
     const newPrice = data.pricePerBaseUnit ?? oldPrice;
-    if (typeof XMLHttpRequest !== "undefined") {
-      try {
-        const response = syncRequest("PATCH", `/api/items/${id}`, {
-          ...data,
-          units: undefined,
-        });
-        if (response.status >= 200 && response.status < 300) {
-          void get().hydrateFromServer();
-          return;
-        }
-        console.error("Item update failed", response.data);
-        return;
-      } catch (error) {
-        console.error("Item update failed", error);
-        return;
-      }
-    }
+    
     set((st) => {
       let newHistory = st.rateHistory;
       if (data.pricePerBaseUnit !== undefined && newPrice !== oldPrice) {
@@ -1158,20 +1097,7 @@ export const useApp = create<AppState>()(
         error: `Item is on a bill in the last ${windowDays} days`,
       };
     }
-    if (typeof XMLHttpRequest !== "undefined") {
-      try {
-        const response = syncRequest("DELETE", `/api/items/${id}`);
-        if (response.status >= 200 && response.status < 300) {
-          void get().hydrateFromServer();
-          return { ok: true };
-        }
-        const body = response.data as { message?: string } | undefined;
-        return { ok: false, error: body?.message ?? "Item deletion failed" };
-      } catch (error) {
-        console.error("Item deletion failed", error);
-        return { ok: false, error: "Item deletion failed" };
-      }
-    }
+    
     set((st) => ({
       items: st.items.map((i) => (i.id === id ? { ...i, isActive: false, updatedAt: now() } : i)),
     }));
@@ -1180,25 +1106,7 @@ export const useApp = create<AppState>()(
 
   // Per resolution #2 — new Stock Adjustment feature
   adjustStock: (itemId, type, deltaInBaseUnit, reason) => {
-    if (typeof XMLHttpRequest !== "undefined") {
-      try {
-        const response = syncRequest("POST", "/api/stock-adjustments", {
-          itemId,
-          type,
-          deltaInBaseUnit,
-          reason,
-        });
-        if (response.status >= 200 && response.status < 300) {
-          void get().hydrateFromServer();
-          return { ok: true, adjustment: response.data as StockAdjustment };
-        }
-        const body = response.data as { message?: string } | undefined;
-        return { ok: false, error: body?.message ?? "Stock adjustment failed" };
-      } catch (error) {
-        console.error("Stock adjustment failed", error);
-        return { ok: false, error: "Stock adjustment failed" };
-      }
-    }
+    
     const s = get();
     const item = s.items.find((i) => i.id === itemId);
     if (!item) return { ok: false, error: "Item not found" };
@@ -1273,18 +1181,7 @@ export const useApp = create<AppState>()(
   },
 
   addCategory: (name, icon) => {
-    if (typeof XMLHttpRequest !== "undefined") {
-      try {
-        const response = syncRequest("POST", "/api/categories", { name, icon });
-        if (response.status >= 200 && response.status < 300) {
-          const category = response.data as Category;
-          set((st) => ({ categories: [...st.categories, category] }));
-          return category;
-        }
-      } catch (error) {
-        console.error("Category creation failed", error);
-      }
-    }
+    
     const ts = now();
     const c: Category = {
       id: uid(),
@@ -1303,40 +1200,13 @@ export const useApp = create<AppState>()(
     const s = get();
     const check = canDeleteCategory(s.items, id);
     if (!check.ok) return check;
-    if (typeof XMLHttpRequest !== "undefined") {
-      try {
-        const response = syncRequest("DELETE", `/api/categories?id=${id}`);
-        if (response.status < 200 || response.status >= 300) {
-          const body = response.data as { message?: string } | undefined;
-          return { ok: false, error: body?.message ?? "Category deletion failed" };
-        }
-        void get().hydrateFromServer();
-        return { ok: true };
-      } catch (error) {
-        console.error("Category deletion failed", error);
-        return { ok: false, error: "Category deletion failed" };
-      }
-    }
+    
     set((st) => ({ categories: st.categories.filter((c) => c.id !== id) }));
     return { ok: true };
   },
 
   addCustomer: (name, phone) => {
-    if (typeof XMLHttpRequest !== "undefined") {
-      try {
-        const response = syncRequest("POST", "/api/customers", { name, phone });
-        if (response.status >= 200 && response.status < 300) {
-          const customer = response.data as Customer;
-          set((st) => ({ customers: [...st.customers, customer] }));
-          return { ok: true, customer };
-        }
-        const body = response.data as { message?: string } | undefined;
-        return { ok: false, warning: body?.message ?? "Customer creation failed" };
-      } catch (error) {
-        console.error("Customer creation failed", error);
-        return { ok: false, warning: "Customer creation failed" };
-      }
-    }
+    
     const s = get();
     let warning: string | undefined;
     if (phone) {
@@ -1360,21 +1230,7 @@ export const useApp = create<AppState>()(
     return { ok: true, customer, warning };
   },
   addSupplier: (name, phone) => {
-    if (typeof XMLHttpRequest !== "undefined") {
-      try {
-        const response = syncRequest("POST", "/api/suppliers", { name, phone });
-        if (response.status >= 200 && response.status < 300) {
-          const supplier = response.data as Supplier;
-          set((st) => ({ suppliers: [...st.suppliers, supplier] }));
-          return { ok: true, supplier };
-        }
-        const body = response.data as { message?: string } | undefined;
-        return { ok: false, warning: body?.message ?? "Supplier creation failed" };
-      } catch (error) {
-        console.error("Supplier creation failed", error);
-        return { ok: false, warning: "Supplier creation failed" };
-      }
-    }
+    
     const s = get();
     let warning: string | undefined;
     if (phone) {
@@ -1395,26 +1251,7 @@ export const useApp = create<AppState>()(
     return { ok: true, supplier, warning };
   },
   recordCustomerPayment: (customerId, amount, note) => {
-    if (typeof XMLHttpRequest !== "undefined") {
-      try {
-        const response = syncRequest("POST", "/api/khata", {
-          partyType: "customer",
-          partyId: customerId,
-          transactionType: "payment_received",
-          amount,
-          note,
-        });
-        if (response.status >= 200 && response.status < 300) {
-          void get().hydrateFromServer();
-          return;
-        }
-        console.error("Customer payment failed", response.data);
-        return;
-      } catch (error) {
-        console.error("Customer payment failed", error);
-        return;
-      }
-    }
+    
     set((st) => {
       const newTxns = [
         ...st.khataTransactions,
@@ -1440,26 +1277,7 @@ export const useApp = create<AppState>()(
     });
   },
   recordSupplierPayment: (supplierId, amount, note) => {
-    if (typeof XMLHttpRequest !== "undefined") {
-      try {
-        const response = syncRequest("POST", "/api/khata", {
-          partyType: "supplier",
-          partyId: supplierId,
-          transactionType: "payment_made",
-          amount,
-          note,
-        });
-        if (response.status >= 200 && response.status < 300) {
-          void get().hydrateFromServer();
-          return;
-        }
-        console.error("Supplier payment failed", response.data);
-        return;
-      } catch (error) {
-        console.error("Supplier payment failed", error);
-        return;
-      }
-    }
+    
     set((st) => {
       const newTxns = [
         ...st.khataTransactions,
@@ -1486,25 +1304,7 @@ export const useApp = create<AppState>()(
   },
 
   recordReturn: (saleBillLineId, qtyReturnedInBaseUnit, reason, disposition) => {
-    if (typeof XMLHttpRequest !== "undefined") {
-      try {
-        const response = syncRequest("POST", "/api/returns", {
-          saleBillLineId,
-          qtyReturnedInBaseUnit,
-          reason,
-          disposition,
-        });
-        if (response.status >= 200 && response.status < 300) {
-          void get().hydrateFromServer();
-          return { ok: true, returnEntry: response.data as Return };
-        }
-        const body = response.data as { message?: string } | undefined;
-        return { ok: false, error: body?.message ?? "Return failed" };
-      } catch (error) {
-        console.error("Return failed", error);
-        return { ok: false, error: "Return failed" };
-      }
-    }
+    
     const s = get();
     const line = s.saleBills.flatMap((b) => b.lines).find((l) => l.id === saleBillLineId);
     if (!line) return { ok: false, error: "Original sale line not found" };
@@ -1594,20 +1394,7 @@ export const useApp = create<AppState>()(
   },
 
   cancelSaleBill: (id, reason) => {
-    if (typeof XMLHttpRequest !== "undefined") {
-      try {
-        const response = syncRequest("POST", `/api/sales/${id}/cancel`, { reason });
-        if (response.status >= 200 && response.status < 300) {
-          void get().hydrateFromServer();
-          return { ok: true };
-        }
-        const body = response.data as { message?: string } | undefined;
-        return { ok: false, error: body?.message ?? "Cancellation failed" };
-      } catch (error) {
-        console.error("Sale cancellation failed", error);
-        return { ok: false, error: "Cancellation failed" };
-      }
-    }
+    
     const s = get();
     const bill = s.saleBills.find((b) => b.id === id);
     if (!bill) return { ok: false, error: "Bill not found" };
@@ -1775,86 +1562,38 @@ export const useApp = create<AppState>()(
     get().saleBills.filter((b) => b.syncStatus === "pending" || b.syncStatus === "failed").length +
     get().purchaseBills.filter((b) => b.syncStatus === "pending" || b.syncStatus === "failed").length,
 
-  // pushBill — pushes a single bill by UUID. Server-side idempotency:
-  // if a bill with this UUID already exists, server returns 200 OK with the existing record
-  // (we model this by always marking synced on success).
   pushBill: (billUuid) => {
-    set((st) => {
-      // Mark as syncing first (UI feedback)
-      const markSaleSyncing = (b: SaleBill): SaleBill =>
-        b.uuid === billUuid && (b.syncStatus === "pending" || b.syncStatus === "failed")
-          ? { ...b, syncStatus: "syncing" as SyncStatus }
-          : b;
-      const markPurchaseSyncing = (b: PurchaseBill): PurchaseBill =>
-        b.uuid === billUuid && (b.syncStatus === "pending" || b.syncStatus === "failed")
-          ? { ...b, syncStatus: "syncing" as SyncStatus }
-          : b;
-      return {
-        saleBills: st.saleBills.map(markSaleSyncing),
-        purchaseBills: st.purchaseBills.map(markPurchaseSyncing),
-      };
+    const sale = get().saleBills.find((bill) => bill.uuid === billUuid);
+    const purchase = get().purchaseBills.find((bill) => bill.uuid === billUuid);
+    if (!sale && !purchase) return;
+    set((st) => ({
+      saleBills: st.saleBills.map((bill) => bill.uuid === billUuid ? { ...bill, syncStatus: "syncing" } : bill),
+      purchaseBills: st.purchaseBills.map((bill) => bill.uuid === billUuid ? { ...bill, syncStatus: "syncing" } : bill),
+    }));
+    void fetch(sale ? "/api/sales" : "/api/purchases", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(sale ? {
+        uuid: sale.uuid, customerId: sale.customerId, paymentType: sale.paymentType,
+        amountPaid: sale.amountPaid ?? (sale.paymentType === "cash" ? sale.totalAmount : 0),
+        lines: sale.lines.map((line) => ({ itemId: line.itemId, unitId: line.unitId, qty: line.qtyInSoldUnit, unitPrice: line.negotiatedPrice ?? line.unitPriceAtSale, ...(line.isEstimatedWeight && line.ratePerKg ? { estimatedWeight: { ratePerKg: line.ratePerKg, saleAmount: line.lineTotal } } : {}) })),
+      } : {
+        uuid: purchase!.uuid, supplierId: purchase!.supplierId, paymentType: purchase!.paymentType,
+        amountPaid: purchase!.amountPaid ?? (purchase!.paymentType === "cash" ? purchase!.totalAmount : 0),
+        lines: purchase!.lines.map((line) => ({ itemId: line.itemId, unitId: line.unitId, qty: line.qtyInPurchasedUnit, unitCost: line.unitCost })),
+      }),
+    }).then((response) => {
+      set((st) => ({
+        saleBills: st.saleBills.map((bill) => bill.uuid === billUuid ? { ...bill, syncStatus: response.ok ? "synced" : "failed", updatedAt: now() } : bill),
+        purchaseBills: st.purchaseBills.map((bill) => bill.uuid === billUuid ? { ...bill, syncStatus: response.ok ? "synced" : "failed", updatedAt: now() } : bill),
+      }));
+    }).catch(() => {
+      set((st) => ({
+        saleBills: st.saleBills.map((bill) => bill.uuid === billUuid ? { ...bill, syncStatus: "failed" } : bill),
+        purchaseBills: st.purchaseBills.map((bill) => bill.uuid === billUuid ? { ...bill, syncStatus: "failed" } : bill),
+      }));
     });
-
-    (() => {
-      try {
-        const sale = get().saleBills.find((bill) => bill.uuid === billUuid);
-        const purchase = get().purchaseBills.find((bill) => bill.uuid === billUuid);
-        const response = sale
-          ? syncRequest("POST", "/api/sales", {
-              uuid: sale.uuid,
-              customerId: sale.customerId,
-              paymentType: sale.paymentType,
-              amountPaid: sale.paymentType === "cash" ? sale.totalAmount : 0,
-              lines: sale.lines.map((line) => ({
-                itemId: line.itemId,
-                unitId: line.unitId,
-                qty: line.qtyInSoldUnit,
-                unitPrice: line.negotiatedPrice ?? line.unitPriceAtSale,
-                ...(line.isEstimatedWeight && line.ratePerKg
-                  ? { estimatedWeight: { ratePerKg: line.ratePerKg, saleAmount: line.lineTotal } }
-                  : {}),
-              })),
-            })
-          : purchase
-          ? syncRequest("POST", "/api/purchases", {
-              uuid: purchase.uuid,
-              supplierId: purchase.supplierId,
-              paymentType: purchase.paymentType,
-              amountPaid: purchase.paymentType === "cash" ? purchase.totalAmount : 0,
-              lines: purchase.lines.map((line) => ({
-                itemId: line.itemId,
-                unitId: line.unitId,
-                qty: line.qtyInPurchasedUnit,
-                unitCost: line.unitCost,
-              })),
-            })
-          : { status: 404, data: undefined };
-        const synced = response.status >= 200 && response.status < 300;
-        set((st) => ({
-          saleBills: st.saleBills.map((bill) =>
-            bill.uuid === billUuid
-              ? { ...bill, syncStatus: synced ? "synced" : "failed", updatedAt: now() }
-              : bill
-          ),
-          purchaseBills: st.purchaseBills.map((bill) =>
-            bill.uuid === billUuid
-              ? { ...bill, syncStatus: synced ? "synced" : "failed", updatedAt: now() }
-              : bill
-          ),
-        }));
-        if (synced) void get().hydrateFromServer();
-      } catch (error) {
-        console.error("Bill synchronization failed", error);
-        set((st) => ({
-          saleBills: st.saleBills.map((bill) =>
-            bill.uuid === billUuid ? { ...bill, syncStatus: "failed" } : bill
-          ),
-          purchaseBills: st.purchaseBills.map((bill) =>
-            bill.uuid === billUuid ? { ...bill, syncStatus: "failed" } : bill
-          ),
-        }));
-      }
-    })();
   },
 
   // Batch wrapper around pushBill — for offline queue (per resolution #1)
@@ -1868,21 +1607,7 @@ export const useApp = create<AppState>()(
   },
 
   markNotificationRead: (id) => {
-    if (typeof XMLHttpRequest !== "undefined") {
-      try {
-        const response = syncRequest("PATCH", "/api/notifications", { id });
-        if (response.status >= 200 && response.status < 300) {
-          set((st) => ({
-            notifications: st.notifications.map((n) =>
-              n.id === id ? { ...n, isRead: true } : n
-            ),
-          }));
-          return;
-        }
-      } catch (error) {
-        console.error("Notification update failed", error);
-      }
-    }
+    
     set((st) => ({
       notifications: st.notifications.map((n) =>
         n.id === id ? { ...n, isRead: true } : n
@@ -1890,13 +1615,7 @@ export const useApp = create<AppState>()(
     }));
   },
   markAllNotificationsRead: () => {
-    if (typeof XMLHttpRequest !== "undefined") {
-      try {
-        syncRequest("PATCH", "/api/notifications", { id: 1, all: true });
-      } catch (error) {
-        console.error("Notification update failed", error);
-      }
-    }
+    
     set((st) => ({
       notifications: st.notifications.map((n) => ({ ...n, isRead: true })),
     }));
@@ -1962,30 +1681,7 @@ export const useApp = create<AppState>()(
   },
   // Per resolution #2 — confirm requires base_unit_name + low_stock_threshold
   confirmAiImport: (sessionId, rows) => {
-    if (typeof XMLHttpRequest !== "undefined") {
-      let added = 0;
-      for (const row of rows) {
-        const item = get().addItem({
-          name: row.name,
-          categoryId: row.categoryId,
-          baseUnitName: row.baseUnitName,
-          icon: "📦",
-          initialQtyInBaseUnit: row.qty,
-          pricePerBaseUnit: row.price,
-          lowStockThreshold: row.lowStockThreshold,
-        });
-        if (item) added++;
-      }
-      set((st) => ({
-        aiSessions: st.aiSessions.map((session) =>
-          session.id === sessionId
-            ? { ...session, status: "confirmed", updatedAt: now() }
-            : session
-        ),
-      }));
-      void get().hydrateFromServer();
-      return added;
-    }
+    
     let added = 0;
     set((st) => {
       const ts = now();
@@ -2081,6 +1777,7 @@ if (typeof window !== "undefined") {
           auditLogs: state.auditLogs,
           attributes: state.attributes,
           attributeOptions: state.attributeOptions,
+          payments: state.payments,
         })
       )
       .catch((error) => {

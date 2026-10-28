@@ -18,6 +18,7 @@ import type {
   ShopConfig,
   StockAdjustment,
   Supplier,
+  LocalPayment,
 } from "./types";
 
 export interface LocalSetting {
@@ -44,6 +45,7 @@ export interface LocalSnapshot {
   auditLogs: AuditLog[];
   attributes?: CatalogueAttribute[];
   attributeOptions?: CatalogueAttributeOption[];
+  payments?: LocalPayment[];
 }
 
 class HardwareShopDatabase extends Dexie {
@@ -65,6 +67,7 @@ class HardwareShopDatabase extends Dexie {
   auditLogs!: Table<AuditLog, number>;
   attributes!: Table<CatalogueAttribute, number>;
   attributeOptions!: Table<CatalogueAttributeOption, number>;
+  payments!: Table<LocalPayment, number>;
 
   constructor() {
     super("hardware_shop_local_v1");
@@ -74,8 +77,8 @@ class HardwareShopDatabase extends Dexie {
       items: "id, shopId, categoryId, name, isActive",
       customers: "id, shopId, name, phone",
       suppliers: "id, shopId, name, phone",
-      saleBills: "id, uuid, shopId, billDate, syncStatus",
-      purchaseBills: "id, uuid, shopId, billDate, syncStatus",
+      saleBills: "id, uuid, shopId, customerId, billDate, syncStatus",
+      purchaseBills: "id, uuid, shopId, supplierId, billDate, syncStatus",
       returns: "id, saleBillLineId",
       khataTransactions: "id, partyType, partyId, transactionDate",
       notifications: "id, shopId, isRead, createdAt",
@@ -88,6 +91,27 @@ class HardwareShopDatabase extends Dexie {
       attributes: "id, shopId, categoryId, sortOrder",
       attributeOptions: "id, attributeId, sortOrder",
     });
+    this.version(2).stores({
+      settings: "&key",
+      categories: "id, shopId, name",
+      items: "id, shopId, categoryId, name, isActive",
+      customers: "id, shopId, name, phone",
+      suppliers: "id, shopId, name, phone",
+      saleBills: "id, uuid, shopId, customerId, billDate, syncStatus",
+      purchaseBills: "id, uuid, shopId, supplierId, billDate, syncStatus",
+      returns: "id, uuid, saleBillLineId, purchaseBillLineId",
+      khataTransactions: "id, partyType, partyId, transactionDate",
+      notifications: "id, shopId, isRead, createdAt",
+      rateHistory: "id, itemId, changedAt",
+      aiSessions: "id, shopId, status",
+      stockAdjustments: "id, uuid, itemId, adjustedAt",
+      categoryImages: "id, categoryId, isDefault",
+      inventoryMovements: "id, shopId, itemId, createdAt",
+      auditLogs: "id, shopId, action, createdAt",
+      attributes: "id, shopId, categoryId, sortOrder",
+      attributeOptions: "id, attributeId, sortOrder",
+      payments: "id, uuid, partyType, partyId, paymentDate, syncStatus",
+    }).upgrade(() => undefined);
   }
 }
 
@@ -109,6 +133,7 @@ const snapshotTables = [
   "categoryImages",
   "inventoryMovements",
   "auditLogs",
+  "payments",
 ] as const;
 
 export async function saveLocalSnapshot(snapshot: LocalSnapshot): Promise<void> {
@@ -133,6 +158,7 @@ export async function saveLocalSnapshot(snapshot: LocalSnapshot): Promise<void> 
       localDb.auditLogs,
       localDb.attributes,
       localDb.attributeOptions,
+      localDb.payments,
     ],
     async () => {
       await localDb.settings.put({ key: "shopConfig", value: snapshot.shopConfig });
@@ -170,6 +196,8 @@ export async function saveLocalSnapshot(snapshot: LocalSnapshot): Promise<void> 
       await localDb.attributes.bulkPut(snapshot.attributes ?? []);
       await localDb.attributeOptions.clear();
       await localDb.attributeOptions.bulkPut(snapshot.attributeOptions ?? []);
+      await localDb.payments.clear();
+      await localDb.payments.bulkPut(snapshot.payments ?? []);
     }
   );
 }

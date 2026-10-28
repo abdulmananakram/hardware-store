@@ -16,8 +16,10 @@ export type SyncStatus = "pending" | "syncing" | "synced" | "failed";
 export type PartyType = "customer" | "supplier";
 export type KhataTxnType =
   | "credit_given"
+  | "customer_return_credit"
   | "payment_received"
   | "payable_incurred"
+  | "supplier_return_credit"
   | "payment_made";
 export type ReturnReason =
   | "no_longer_needed"
@@ -120,6 +122,7 @@ export interface RateHistoryEntry {
 // Child table — manual stock adjustments (per resolution #2)
 export interface StockAdjustment {
   id: number;
+  uuid?: string;
   itemId: number;
   type: AdjustmentType;
   deltaInBaseUnit: number; // positive = add, negative = remove
@@ -163,6 +166,7 @@ export interface SaleBillLine {
   unitPriceAtSale: number; // per base unit, snapshot
   lineTotal: number;
   saleMode?: SaleMode;
+  conversionToBaseSnapshot?: number;
   // Per hardware_shop_pos_business_rules.md:
   isEstimatedWeight?: boolean;
   ratePerKg?: number;
@@ -183,6 +187,9 @@ export interface SaleBill {
   billDate: string;
   paymentType: PaymentType;
   totalAmount: number;
+  amountPaid?: number;
+  outstandingAmount?: number;
+  paymentStatus?: string;
   subtotalAmount?: number;
   roundingAdjustment?: number;
   syncStatus: SyncStatus;
@@ -218,6 +225,9 @@ export interface PurchaseBill {
   billDate: string;
   paymentType: PaymentType;
   totalAmount: number;
+  amountPaid?: number;
+  outstandingAmount?: number;
+  paymentStatus?: string;
   subtotalAmount?: number;
   roundingAdjustment?: number;
   syncStatus: SyncStatus;
@@ -231,7 +241,9 @@ export interface PurchaseBill {
 // Top-level table
 export interface Return {
   id: number;
-  saleBillLineId: number;
+  uuid?: string;
+  saleBillLineId?: number;
+  purchaseBillLineId?: number;
   qtyReturnedInBaseUnit: number;
   reason: ReturnReason;
   disposition: ReturnDisposition;
@@ -273,6 +285,20 @@ export interface AppNotification {
   createdAt: string;
 }
 
+export interface LocalPayment {
+  id: number;
+  uuid: string;
+  partyType: PartyType;
+  partyId: number;
+  amount: number;
+  method: string;
+  note?: string;
+  allocations: { billId: number; amount: number; billType: "sale" | "purchase" }[];
+  syncStatus: SyncStatus;
+  paymentDate: string;
+  createdAt: string;
+}
+
 // Child / Ledger table — Permanent Inventory Movements Ledger (Per Section 4 & 9)
 export type InventoryMovementType =
   | "sale"
@@ -282,7 +308,16 @@ export type InventoryMovementType =
   | "damage"
   | "adjustment_pos"
   | "adjustment_neg"
-  | "cancellation";
+  | "cancellation"
+  | "OPENING"
+  | "PURCHASE_IN"
+  | "SALE_OUT"
+  | "CUSTOMER_RETURN_IN"
+  | "SUPPLIER_RETURN_OUT"
+  | "DAMAGE_OUT"
+  | "ADJUSTMENT_IN"
+  | "ADJUSTMENT_OUT"
+  | "REVERSAL";
 
 export interface InventoryMovement {
   id: number;
@@ -290,8 +325,11 @@ export interface InventoryMovement {
   type: InventoryMovementType;
   deltaInBaseUnit: number; // positive = stock in, negative = stock out
   newQtyInBaseUnit: number; // balance after movement
-  referenceType: "sale_bill" | "purchase_bill" | "return" | "adjustment";
+  referenceType: string;
   referenceId: number;
+  referenceUuid?: string;
+  reason?: string;
+  costSnapshot?: number;
   note?: string;
   createdAt: string;
 }
@@ -299,7 +337,7 @@ export interface InventoryMovement {
 // Audit trail for sensitive events (Section 12)
 export interface AuditLog {
   id: number;
-  action: "below_cost_sale" | "price_override" | "cancellation" | "stock_adjustment" | "category_deleted";
+  action: string;
   details: string;
   userId?: string;
   createdAt: string;
