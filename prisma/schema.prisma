@@ -64,6 +64,7 @@ model Item {
   units                ItemUnit[]
   rateHistory          RateHistory[]
   stockAdjustments     StockAdjustment[]
+  inventoryMovements   InventoryMovement[]
   saleLines            SaleBillLine[]
   purchaseLines        PurchaseBillLine[]
 }
@@ -98,6 +99,33 @@ model StockAdjustment {
   item            Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
 }
 
+model InventoryMovement {
+  id               Int      @id @default(autoincrement())
+  shopId           Int      @default(1)
+  itemId           Int
+  type             String
+  deltaInBaseUnit  Float
+  newQtyInBaseUnit Float
+  referenceType    String
+  referenceId      Int?
+  referenceUuid    String?
+  reason           String
+  createdAt        DateTime @default(now())
+  item             Item     @relation(fields: [itemId], references: [id])
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  shopId     Int      @default(1)
+  action     String
+  entityType String?
+  entityId   Int?
+  details    String
+  userId     String?
+  reason     String?
+  createdAt  DateTime @default(now())
+}
+
 model Customer {
   id           Int      @id @default(autoincrement())
   shopId       Int      @default(1)
@@ -128,6 +156,10 @@ model SaleBill {
   billDate    DateTime       @default(now())
   paymentType String         // cash, udhaar
   totalAmount Float
+  amountPaid Float            @default(0)
+  outstandingAmount Float     @default(0)
+  paymentStatus String        @default("unpaid")
+  paymentMethod String?
   syncStatus  String         @default("synced")
   cancelled   Boolean        @default(false)
   cancelReason String?
@@ -146,6 +178,15 @@ model SaleBillLine {
   qtyInBaseUnit   Float
   unitPriceAtSale Float
   lineTotal       Float
+  saleMode        String   @default("quantity")
+  conversionToBaseSnapshot Float @default(1)
+  isEstimatedWeight Boolean @default(false)
+  ratePerKg       Float?
+  unroundedGrams  Float?
+  roundedGrams    Float?
+  roundingPolicyVersion String?
+  costSnapshot    Float?
+  negotiatedPrice Float?
   createdAt       DateTime @default(now())
   saleBill        SaleBill @relation(fields: [saleBillId], references: [id], onDelete: Cascade)
   item            Item     @relation(fields: [itemId], references: [id])
@@ -160,6 +201,10 @@ model PurchaseBill {
   billDate     DateTime           @default(now())
   paymentType  String             // cash, udhaar
   totalAmount  Float
+  amountPaid Float                @default(0)
+  outstandingAmount Float         @default(0)
+  paymentStatus String            @default("unpaid")
+  paymentMethod String?
   syncStatus   String             @default("synced")
   cancelled    Boolean            @default(false)
   cancelReason String?
@@ -179,6 +224,7 @@ model PurchaseBillLine {
   unitCost            Float
   costPerBaseUnit     Float
   lineTotal           Float
+  conversionToBaseSnapshot Float @default(1)
   createdAt           DateTime     @default(now())
   purchaseBill        PurchaseBill @relation(fields: [purchaseBillId], references: [id], onDelete: Cascade)
   item                Item         @relation(fields: [itemId], references: [id])
@@ -187,6 +233,7 @@ model PurchaseBillLine {
 model Return {
   id                    Int          @id @default(autoincrement())
   saleBillLineId        Int
+  purchaseBillLineId    Int?
   qtyReturnedInBaseUnit Float
   reason                String
   disposition           String
