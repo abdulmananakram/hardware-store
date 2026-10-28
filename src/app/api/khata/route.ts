@@ -9,7 +9,7 @@ import { receivePayment } from "@/server/services/paymentService";
 const schema = z.object({
   partyType: z.enum(["customer", "supplier"]),
   partyId: z.number().int().positive(),
-  transactionType: z.enum(["credit_given", "payment_received", "payable_incurred", "payment_made"]),
+  transactionType: z.enum(["credit_given", "customer_return_credit", "payment_received", "payable_incurred", "supplier_return_credit", "payment_made"]),
   amount: z.number().positive(),
   note: z.string().optional(),
 });

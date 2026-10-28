@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { localDb } from "../../lib/localDb";
-import { createLocalPurchase, createLocalSale, createLocalStockAdjustment, recordLocalPayment } from "../../lib/localServices";
+import { createLocalPurchase, createLocalSale, createLocalStockAdjustment, createLocalSupplierReturn, recordLocalPayment } from "../../lib/localServices";
 
 const item = {
   id: 1, shopId: 1, categoryId: 1, name: "Nail", icon: "📦", baseUnitName: "Piece",
@@ -44,5 +44,13 @@ describe("offline domain services", () => {
     expect(adjustment.systemQtyInBaseUnit).toBe(10);
     expect(adjustment.deltaInBaseUnit).toBe(-3);
     expect(await localDb.inventoryMovements.count()).toBe(1);
+  });
+
+  test("supplier return uses a distinct credit transaction", async () => {
+    const purchase = await createLocalPurchase({ uuid: "purchase-return", supplierId: 1, paymentType: "udhaar", lines: [{ itemId: 1, unitId: 1, qty: 2, unitCost: 10 }] });
+    await createLocalSupplierReturn({ uuid: "return-1", purchaseBillLineId: purchase.lines[0].id, qtyReturnedInBaseUnit: 1, reason: "Wrong item" });
+    const transactions = await localDb.khataTransactions.toArray();
+    expect(transactions.at(-1)?.transactionType).toBe("supplier_return_credit");
+    expect(transactions.at(-1)?.amount).toBe(10);
   });
 });

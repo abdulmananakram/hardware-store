@@ -82,7 +82,7 @@ export async function createLocalSale(input: {
       const qty = lines.reduce((sum, line) => sum + line.qtyInBaseUnit, 0);
       const next = round2(item.qtyInBaseUnit - qty);
       await localDb.items.put({ ...item, qtyInBaseUnit: next, updatedAt: ts });
-      await localDb.inventoryMovements.bulkAdd(lines.map((line) => ({ id: line.id, itemId: item.id, type: "SALE_OUT", deltaInBaseUnit: -line.qtyInBaseUnit, newQtyInBaseUnit: next, referenceType: "sale_bill" as const, referenceId: bill.id, referenceUuid: bill.uuid, note: line.isEstimatedWeight ? `Estimated ${line.roundedGrams}g` : "Sale", createdAt: ts })));
+      for (const line of lines) await localDb.inventoryMovements.add({ id: await nextId(localDb.inventoryMovements), itemId: item.id, type: "SALE_OUT", deltaInBaseUnit: -line.qtyInBaseUnit, newQtyInBaseUnit: next, referenceType: "sale_bill", referenceId: bill.id, referenceUuid: bill.uuid, note: line.isEstimatedWeight ? `Estimated ${line.roundedGrams}g` : "Sale", createdAt: ts });
     }
     await localDb.saleBills.add(bill);
     const txns = await localDb.khataTransactions.toArray();
@@ -126,7 +126,7 @@ export async function createLocalPurchase(input: {
       const landed = subtotal > 0 ? total / subtotal : 1;
       const cost = round2(line.costPerBaseUnit * landed);
       await localDb.items.put({ ...item, qtyInBaseUnit: round2(item.qtyInBaseUnit + line.qtyInBaseUnit), costPerBaseUnit: calculateWeightedAverageCost(item.qtyInBaseUnit, item.costPerBaseUnit ?? 0, line.qtyInBaseUnit, cost), updatedAt: ts });
-      await localDb.inventoryMovements.add({ id: line.id, itemId: line.itemId, type: "PURCHASE_IN", deltaInBaseUnit: line.qtyInBaseUnit, newQtyInBaseUnit: round2(item.qtyInBaseUnit + line.qtyInBaseUnit), referenceType: "purchase_bill", referenceId: bill.id, referenceUuid: bill.uuid, costSnapshot: cost, note: "Purchase", createdAt: ts });
+      await localDb.inventoryMovements.add({ id: await nextId(localDb.inventoryMovements), itemId: line.itemId, type: "PURCHASE_IN", deltaInBaseUnit: line.qtyInBaseUnit, newQtyInBaseUnit: round2(item.qtyInBaseUnit + line.qtyInBaseUnit), referenceType: "purchase_bill", referenceId: bill.id, referenceUuid: bill.uuid, costSnapshot: cost, note: "Purchase", createdAt: ts });
     }
     await localDb.purchaseBills.add(bill);
     if (pay.outstandingAmount > 0) await localDb.khataTransactions.add({ id: await nextId(localDb.khataTransactions), partyType: "supplier", partyId: input.supplierId, transactionType: "payable_incurred", amount: pay.outstandingAmount, relatedPurchaseBillId: bill.id, transactionDate: ts, createdAt: ts });
@@ -149,7 +149,7 @@ export async function createLocalStockAdjustment(input: { uuid: string; itemId: 
     const adjustment: StockAdjustment = { id: await nextId(localDb.stockAdjustments), uuid: input.uuid, itemId: item.id, type: input.type, deltaInBaseUnit: delta, newQtyInBaseUnit: next, systemQtyInBaseUnit: system, countedQtyInBaseUnit: input.countedQtyInBaseUnit, reason: input.reason, adjustedAt: ts };
     await localDb.stockAdjustments.add(adjustment);
     await localDb.items.put({ ...item, qtyInBaseUnit: next, updatedAt: ts });
-    await localDb.inventoryMovements.add({ id: adjustment.id, itemId: item.id, type: delta >= 0 ? "ADJUSTMENT_IN" : "ADJUSTMENT_OUT", deltaInBaseUnit: delta, newQtyInBaseUnit: next, referenceType: "adjustment", referenceId: adjustment.id, referenceUuid: input.uuid, reason: input.reason, createdAt: ts });
+    await localDb.inventoryMovements.add({ id: await nextId(localDb.inventoryMovements), itemId: item.id, type: delta >= 0 ? "ADJUSTMENT_IN" : "ADJUSTMENT_OUT", deltaInBaseUnit: delta, newQtyInBaseUnit: next, referenceType: "adjustment", referenceId: adjustment.id, referenceUuid: input.uuid, reason: input.reason, createdAt: ts });
     return adjustment;
   });
 }
@@ -183,5 +183,54 @@ export async function recordLocalPayment(input: { uuid: string; partyType: "cust
     }
     await localDb.khataTransactions.add({ id: await nextId(localDb.khataTransactions), partyType: input.partyType, partyId: input.partyId, transactionType: input.partyType === "customer" ? "payment_received" : "payment_made", amount: input.amount, note: input.note, transactionDate: ts, createdAt: ts });
     return paymentEntry;
+  });
+}
+
+export async function createLocalCustomerReturn(input: { uuid: string; saleBillLineId: number; qtyReturnedInBaseUnit: number; reason: string; disposition: "back_to_sellable_stock" | "damaged_pile" }): Promise<Return> {
+  return localDb.transaction("rw", tables, async () => {
+    const duplicate = await localDb.returns.where("uuid").equals(input.uuid).first();
+    if (duplicate) return duplicate;
+    const sales = await localDb.saleBills.toArray();
+    const line = sales.flatMap((bill) => bill.lines).find((candidate) => candidate.id === input.saleBillLineId);
+    if (!line || input.qtyReturnedInBaseUnit <= 0) throw new Error("Sale line not found");
+    const prior = (await localDb.returns.toArray()).filter((entry) => entry.saleBillLineId === line.id).reduce((sum, entry) => sum + entry.qtyReturnedInBaseUnit, 0);
+    if (input.qtyReturnedInBaseUnit > round2(line.qtyInBaseUnit - prior)) throw new Error("Return quantity exceeds the unreturned quantity");
+    const ts = stamp();
+    const entry: Return = { id: await nextId(localDb.returns), uuid: input.uuid, saleBillLineId: line.id, qtyReturnedInBaseUnit: input.qtyReturnedInBaseUnit, reason: input.reason as Return["reason"], disposition: input.disposition, refundAmount: round2(input.qtyReturnedInBaseUnit / line.qtyInBaseUnit * line.lineTotal), returnDate: ts, createdAt: ts, updatedAt: ts };
+    await localDb.returns.add(entry);
+    if (input.disposition === "back_to_sellable_stock") {
+      const item = await localDb.items.get(line.itemId);
+      if (item) {
+        const next = round2(item.qtyInBaseUnit + input.qtyReturnedInBaseUnit);
+        await localDb.items.put({ ...item, qtyInBaseUnit: next, updatedAt: ts });
+        await localDb.inventoryMovements.add({ id: await nextId(localDb.inventoryMovements), itemId: item.id, type: "CUSTOMER_RETURN_IN", deltaInBaseUnit: input.qtyReturnedInBaseUnit, newQtyInBaseUnit: next, referenceType: "return", referenceId: entry.id, referenceUuid: input.uuid, reason: input.reason, costSnapshot: line.costSnapshot, createdAt: ts });
+      }
+    }
+    const bill = sales.find((candidate) => candidate.lines.some((candidateLine) => candidateLine.id === line.id));
+    if (bill?.customerId) await localDb.khataTransactions.add({ id: await nextId(localDb.khataTransactions), partyType: "customer", partyId: bill.customerId, transactionType: "customer_return_credit", amount: entry.refundAmount, relatedReturnId: entry.id, note: "Customer return credit", transactionDate: ts, createdAt: ts });
+    return entry;
+  });
+}
+
+export async function createLocalSupplierReturn(input: { uuid: string; purchaseBillLineId: number; qtyReturnedInBaseUnit: number; reason: string }): Promise<Return> {
+  return localDb.transaction("rw", tables, async () => {
+    const duplicate = await localDb.returns.where("uuid").equals(input.uuid).first();
+    if (duplicate) return duplicate;
+    const purchases = await localDb.purchaseBills.toArray();
+    const line = purchases.flatMap((bill) => bill.lines).find((candidate) => candidate.id === input.purchaseBillLineId);
+    if (!line || input.qtyReturnedInBaseUnit <= 0) throw new Error("Purchase line not found");
+    const prior = (await localDb.returns.toArray()).filter((entry) => entry.purchaseBillLineId === line.id).reduce((sum, entry) => sum + entry.qtyReturnedInBaseUnit, 0);
+    if (input.qtyReturnedInBaseUnit > round2(line.qtyInBaseUnit - prior)) throw new Error("Return quantity exceeds the unreturned quantity");
+    const item = await localDb.items.get(line.itemId);
+    if (!item || item.qtyInBaseUnit < input.qtyReturnedInBaseUnit) throw new Error("Insufficient stock for supplier return");
+    const ts = stamp();
+    const entry: Return = { id: await nextId(localDb.returns), uuid: input.uuid, purchaseBillLineId: line.id, qtyReturnedInBaseUnit: input.qtyReturnedInBaseUnit, reason: input.reason as Return["reason"], disposition: "damaged_pile", refundAmount: round2(input.qtyReturnedInBaseUnit / line.qtyInBaseUnit * line.lineTotal), returnDate: ts, createdAt: ts, updatedAt: ts };
+    await localDb.returns.add(entry);
+    const next = round2(item.qtyInBaseUnit - input.qtyReturnedInBaseUnit);
+    await localDb.items.put({ ...item, qtyInBaseUnit: next, updatedAt: ts });
+    await localDb.inventoryMovements.add({ id: await nextId(localDb.inventoryMovements), itemId: item.id, type: "SUPPLIER_RETURN_OUT", deltaInBaseUnit: -input.qtyReturnedInBaseUnit, newQtyInBaseUnit: next, referenceType: "supplier_return", referenceId: entry.id, referenceUuid: input.uuid, reason: input.reason, costSnapshot: line.costPerBaseUnit, createdAt: ts });
+    const bill = purchases.find((candidate) => candidate.lines.some((candidateLine) => candidateLine.id === line.id));
+    if (bill) await localDb.khataTransactions.add({ id: await nextId(localDb.khataTransactions), partyType: "supplier", partyId: bill.supplierId, transactionType: "supplier_return_credit", amount: entry.refundAmount, relatedReturnId: entry.id, note: "Supplier return credit", transactionDate: ts, createdAt: ts });
+    return entry;
   });
 }

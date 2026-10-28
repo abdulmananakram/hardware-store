@@ -21,7 +21,7 @@ export const createCustomerReturn = async (input: {
     await tx.inventoryMovement.create({ data: { itemId: line.itemId, type: "CUSTOMER_RETURN_IN", deltaInBaseUnit: input.qtyReturnedInBaseUnit, newQtyInBaseUnit: item.qtyInBaseUnit, referenceType: "return", referenceId: entry.id, reason: input.reason, costSnapshot: line.costSnapshot } });
   }
   if (line.saleBill.customerId) {
-    await recordTransaction(tx, { partyType: "customer", partyId: line.saleBill.customerId, transactionType: "payment_received", amount: refundAmount, relatedReturnId: entry.id, note: "Customer return credit" });
+    await recordTransaction(tx, { partyType: "customer", partyId: line.saleBill.customerId, transactionType: "customer_return_credit", amount: refundAmount, relatedReturnId: entry.id, note: "Customer return credit" });
     await tx.customer.update({ where: { id: line.saleBill.customerId }, data: { khataBalance: await getBalance("customer", line.saleBill.customerId, tx) } });
   }
   await tx.auditLog.create({ data: { action: "customer_return", entityType: "return", entityId: entry.id, details: JSON.stringify(input) } });
@@ -43,7 +43,7 @@ export const createSupplierReturn = async (input: {
   const item = await tx.item.update({ where: { id: line.itemId }, data: { qtyInBaseUnit: { decrement: input.qtyReturnedInBaseUnit } } });
   if (item.qtyInBaseUnit < 0) throw new ServiceError("Insufficient stock for supplier return");
   await tx.inventoryMovement.create({ data: { itemId: line.itemId, type: "SUPPLIER_RETURN_OUT", deltaInBaseUnit: -input.qtyReturnedInBaseUnit, newQtyInBaseUnit: item.qtyInBaseUnit, referenceType: "supplier_return", referenceId: entry.id, reason: input.reason, costSnapshot: line.costPerBaseUnit } });
-  await recordTransaction(tx, { partyType: "supplier", partyId: line.purchaseBill.supplierId, transactionType: "payment_received", amount: refundAmount, relatedReturnId: entry.id, note: "Supplier return credit" });
+  await recordTransaction(tx, { partyType: "supplier", partyId: line.purchaseBill.supplierId, transactionType: "supplier_return_credit", amount: refundAmount, relatedReturnId: entry.id, note: "Supplier return credit" });
   await tx.auditLog.create({ data: { action: "supplier_return", entityType: "return", entityId: entry.id, details: JSON.stringify(input) } });
   return entry;
 });
