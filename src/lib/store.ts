@@ -50,6 +50,7 @@ import {
   createLocalStockAdjustment,
   recordLocalPayment,
 } from "./localServices";
+import { generateLocalNotifications } from "./localNotifications";
 
 // ============================================================
 // Store shape
@@ -1623,6 +1624,7 @@ export const useApp = create<AppState>()(
   },
   // Per resolution #7 — Khata reminder trigger rule
   triggerKhataReminders: () => {
+    void generateLocalNotifications().catch((error) => console.error("Local notification generation failed", error));
     const s = get();
     const cfg = s.shopConfig;
     const nowMs = Date.now();
