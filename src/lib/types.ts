@@ -11,13 +11,15 @@
 //   - /sync/push is just a batch wrapper around the same POST endpoints
 // ============================================================
 
-export type PaymentType = "cash" | "udhaar";
+export type PaymentType = "cash" | "udhaar" | "partial";
 export type SyncStatus = "pending" | "syncing" | "synced" | "failed";
 export type PartyType = "customer" | "supplier";
 export type KhataTxnType =
   | "credit_given"
+  | "customer_return_credit"
   | "payment_received"
   | "payable_incurred"
+  | "supplier_return_credit"
   | "payment_made";
 export type ReturnReason =
   | "no_longer_needed"
@@ -26,6 +28,7 @@ export type ReturnReason =
   | "other";
 export type ReturnDisposition = "back_to_sellable_stock" | "damaged_pile";
 export type AdjustmentType = "restock" | "correction" | "damage" | "loss" | "initial";
+export type SaleMode = "QTY" | "PACK" | "WEIGHT" | "AMOUNT_EST";
 
 // Child table — image in a category's library
 export interface CategoryImage {
@@ -68,6 +71,10 @@ export interface Item {
   categoryId: number;
   name: string;
   urduName?: string;
+  skuCode?: string | null;
+  brand?: string | null;
+  specification?: string | null;
+  notes?: string | null;
   photoUrl?: string;
   icon: string; // emoji fallback
   baseUnitName: string;
@@ -77,10 +84,30 @@ export interface Item {
   pricePerBaseUnit: number;
   costPerBaseUnit?: number; // last known cost (auto-derived from purchase line, per resolution #5)
   lowStockThreshold: number;
+  saleMode?: string | null;
+  fractionalPackAllowed?: boolean;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
   units: ItemUnit[];
+}
+
+export interface CatalogueAttribute {
+  id: number;
+  shopId: number;
+  categoryId: number;
+  name: string;
+  urduName?: string;
+  sortOrder: number;
+  options: CatalogueAttributeOption[];
+}
+
+export interface CatalogueAttributeOption {
+  id: number;
+  attributeId: number;
+  value: string;
+  urduValue?: string;
+  sortOrder: number;
 }
 
 // Child table
@@ -95,11 +122,14 @@ export interface RateHistoryEntry {
 // Child table — manual stock adjustments (per resolution #2)
 export interface StockAdjustment {
   id: number;
+  uuid?: string;
   itemId: number;
   type: AdjustmentType;
   deltaInBaseUnit: number; // positive = add, negative = remove
   newQtyInBaseUnit: number; // snapshot after adjustment
   reason: string;
+  systemQtyInBaseUnit?: number;
+  countedQtyInBaseUnit?: number;
   adjustedAt: string; // created_at
 }
 
@@ -135,6 +165,8 @@ export interface SaleBillLine {
   qtyInBaseUnit: number;
   unitPriceAtSale: number; // per base unit, snapshot
   lineTotal: number;
+  saleMode?: SaleMode;
+  conversionToBaseSnapshot?: number;
   // Per hardware_shop_pos_business_rules.md:
   isEstimatedWeight?: boolean;
   ratePerKg?: number;
@@ -155,6 +187,11 @@ export interface SaleBill {
   billDate: string;
   paymentType: PaymentType;
   totalAmount: number;
+  amountPaid?: number;
+  outstandingAmount?: number;
+  paymentStatus?: string;
+  subtotalAmount?: number;
+  roundingAdjustment?: number;
   syncStatus: SyncStatus;
   cancelled?: boolean;
   cancelReason?: string;
@@ -188,6 +225,11 @@ export interface PurchaseBill {
   billDate: string;
   paymentType: PaymentType;
   totalAmount: number;
+  amountPaid?: number;
+  outstandingAmount?: number;
+  paymentStatus?: string;
+  subtotalAmount?: number;
+  roundingAdjustment?: number;
   syncStatus: SyncStatus;
   cancelled?: boolean;
   cancelReason?: string;
@@ -199,7 +241,9 @@ export interface PurchaseBill {
 // Top-level table
 export interface Return {
   id: number;
-  saleBillLineId: number;
+  uuid?: string;
+  saleBillLineId?: number;
+  purchaseBillLineId?: number;
   qtyReturnedInBaseUnit: number;
   reason: ReturnReason;
   disposition: ReturnDisposition;
@@ -222,8 +266,10 @@ export interface KhataTransaction {
   relatedPurchaseBillId?: number;
   relatedReturnId?: number;
   note?: string;
+  costSnapshot?: number;
   transactionDate: string;
   createdAt: string;
+  running?: number;
 }
 
 // Top-level table
@@ -239,6 +285,20 @@ export interface AppNotification {
   createdAt: string;
 }
 
+export interface LocalPayment {
+  id: number;
+  uuid: string;
+  partyType: PartyType;
+  partyId: number;
+  amount: number;
+  method: string;
+  note?: string;
+  allocations: { billId: number; amount: number; billType: "sale" | "purchase" }[];
+  syncStatus: SyncStatus;
+  paymentDate: string;
+  createdAt: string;
+}
+
 // Child / Ledger table — Permanent Inventory Movements Ledger (Per Section 4 & 9)
 export type InventoryMovementType =
   | "sale"
@@ -248,7 +308,16 @@ export type InventoryMovementType =
   | "damage"
   | "adjustment_pos"
   | "adjustment_neg"
-  | "cancellation";
+  | "cancellation"
+  | "OPENING"
+  | "PURCHASE_IN"
+  | "SALE_OUT"
+  | "CUSTOMER_RETURN_IN"
+  | "SUPPLIER_RETURN_OUT"
+  | "DAMAGE_OUT"
+  | "ADJUSTMENT_IN"
+  | "ADJUSTMENT_OUT"
+  | "REVERSAL";
 
 export interface InventoryMovement {
   id: number;
@@ -256,8 +325,11 @@ export interface InventoryMovement {
   type: InventoryMovementType;
   deltaInBaseUnit: number; // positive = stock in, negative = stock out
   newQtyInBaseUnit: number; // balance after movement
-  referenceType: "sale_bill" | "purchase_bill" | "return" | "adjustment";
+  referenceType: string;
   referenceId: number;
+  referenceUuid?: string;
+  reason?: string;
+  costSnapshot?: number;
   note?: string;
   createdAt: string;
 }
@@ -265,7 +337,7 @@ export interface InventoryMovement {
 // Audit trail for sensitive events (Section 12)
 export interface AuditLog {
   id: number;
-  action: "below_cost_sale" | "price_override" | "cancellation" | "stock_adjustment" | "category_deleted";
+  action: string;
   details: string;
   userId?: string;
   createdAt: string;
@@ -301,6 +373,8 @@ export interface ShopConfig {
   baseUnitDefault: string; // default "Piece"
   khataReminderThresholdDays: number; // bills older than this trigger reminder (default 7)
   khataReminderThresholdAmount: number; // balances above this trigger reminder (default 1000)
+  language?: "en" | "ur";
+  billRoundingEnabled?: boolean;
 }
 
 // ============================================================
@@ -328,7 +402,8 @@ export type ScreenId =
   | "customer-catalog"
   | "stock-adjust"
   | "category-images"
-  | "category-image-pick";
+  | "category-image-pick"
+  | "reports";
 
 export interface NavParams {
   itemId?: number;

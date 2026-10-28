@@ -3,6 +3,7 @@
 import { useApp, fmtRs, fmtDate } from "@/lib/store";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { t } from "@/lib/i18n";
 
 export function DashboardScreen() {
   const saleBills = useApp((s) => s.saleBills);
@@ -12,6 +13,8 @@ export function DashboardScreen() {
   const notifications = useApp((s) => s.notifications);
   const navigate = useApp((s) => s.navigate);
   const getCustomer = useApp((s) => s.getCustomer);
+  const language = useApp((s) => s.shopConfig.language ?? "en");
+  const updateShopConfig = useApp((s) => s.updateShopConfig);
 
   // Today's total sales (only non-cancelled, today's date)
   const todayStart = new Date();
@@ -37,6 +40,11 @@ export function DashboardScreen() {
 
   return (
     <div className="px-3 pt-3 pb-28 space-y-3">
+      <div className="flex justify-end">
+        <button onClick={() => updateShopConfig({ language: language === "en" ? "ur" : "en" })} className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold shadow-sm border">
+          {language === "en" ? t("urdu", language) : t("english", language)}
+        </button>
+      </div>
       {/* Hero — New Sale Bill */}
       <button
         onClick={() => navigate("sale-new")}
@@ -45,7 +53,7 @@ export function DashboardScreen() {
         <div className="flex items-center justify-between">
           <div>
             <div className="text-3xl">🧾</div>
-            <h2 className="text-lg font-extrabold mt-1">New Sale Bill</h2>
+            <h2 className="text-lg font-extrabold mt-1">{t("newSaleBill", language)}</h2>
             <p className="text-teal-100 text-xs">Tap to start billing in seconds</p>
           </div>
           <div className="text-4xl">→</div>
@@ -138,7 +146,7 @@ export function DashboardScreen() {
       </div>
 
       {/* Quick actions */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-4 gap-2">
         <Button
           variant="outline"
           onClick={() => navigate("purchase-new")}
@@ -162,6 +170,14 @@ export function DashboardScreen() {
         >
           <span className="text-xl">🛍️</span>
           <span className="text-[11px] font-semibold">Price List</span>
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => navigate("reports")}
+          className="h-auto py-3 flex flex-col gap-1 border-slate-200"
+        >
+          <span className="text-xl">📊</span>
+          <span className="text-[11px] font-semibold">Reports</span>
         </Button>
       </div>
 

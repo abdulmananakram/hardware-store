@@ -1,0 +1,12 @@
+{
+  "name": "Hardware Shop POS",
+  "short_name": "Hardware POS",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f1f5f4",
+  "theme_color": "#0d9488",
+  "description": "Offline-first hardware shop inventory and billing",
+  "icons": [
+    { "src": "/logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

@@ -1,7 +1,6 @@
 "use client";
 
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 import {
   Category,
   Item,
@@ -29,22 +28,13 @@ import {
   SyncStatus,
   InventoryMovement,
   AuditLog,
+  SaleMode,
+  CatalogueAttribute,
+  CatalogueAttributeOption,
+  LocalPayment,
 } from "./types";
-import {
-  seedCategories,
-  seedItems,
-  seedCustomers,
-  seedSuppliers,
-  seedSaleBills,
-  seedPurchaseBills,
-  seedKhataTransactions,
-  seedNotifications,
-  seedRateHistory,
-  seedAiImportSessions,
-  seedShopConfig,
-  seedStockAdjustments,
-  seedCategoryImages,
-} from "./seed";
+import { loadLocalSnapshot, saveLocalSnapshot } from "./localDb";
+import { hasLocalPin, setLocalPin, verifyLocalPin } from "./localAuth";
 import {
   round2,
   computeBalance,
@@ -54,6 +44,13 @@ import {
   calculateWeightedAverageCost,
   checkBelowCost,
 } from "./business";
+import {
+  createLocalPurchase,
+  createLocalSale,
+  createLocalStockAdjustment,
+  recordLocalPayment,
+} from "./localServices";
+import { generateLocalNotifications } from "./localNotifications";
 
 // ============================================================
 // Store shape
@@ -62,7 +59,11 @@ import {
 interface AppState {
   // Auth
   isAuthed: boolean;
-  login: (pin: string) => boolean;
+  login: (pin: string) => Promise<boolean>;
+  pinConfigured: boolean;
+  initializeLocalAuth: () => Promise<void>;
+  setOwnerPin: (pin: string) => Promise<void>;
+  hydrateFromServer: () => Promise<boolean>;
 
   // Navigation
   screen: ScreenId;
@@ -95,6 +96,9 @@ interface AppState {
   categoryImages: CategoryImage[]; // library per category
   inventoryMovements: InventoryMovement[]; // Permanent inventory ledger (Section 4 & 9)
   auditLogs: AuditLog[]; // Audit trail (Section 12)
+  attributes: CatalogueAttribute[];
+  attributeOptions: CatalogueAttributeOption[];
+  payments: LocalPayment[];
 
   // ============================================================
   // Image library actions (per Category image library feature)
@@ -129,12 +133,14 @@ interface AppState {
   draftSale: {
     customerId: number | null;
     paymentType: PaymentType;
+    amountPaid?: number;
     lines: {
       tempId: string;
       itemId: number;
       unitId: number;
       qty: number;
       lineTotal: number;
+      saleMode?: SaleMode;
       customUnitPrice?: number;
       isEstimatedWeight?: boolean;
       ratePerKg?: number;
@@ -154,6 +160,7 @@ interface AppState {
   draftSaleRemoveLine: (tempId: string) => void;
   draftSaleSetCustomer: (id: number | null) => void;
   draftSaleSetPayment: (t: PaymentType) => void;
+  draftSaleSetAmountPaid: (amount: number | undefined) => void;
   draftSaleTotal: () => number;
   commitSale: () => SaleBill;
 
@@ -180,6 +187,11 @@ interface AppState {
   // Inventory CRUD
   addItem: (data: {
     name: string;
+    urduName?: string;
+    skuCode?: string;
+    brand?: string;
+    specification?: string;
+    notes?: string;
     categoryId: number;
     baseUnitName: string;
     pricePerBaseUnit: number;
@@ -188,6 +200,8 @@ interface AppState {
     initialQtyInBaseUnit: number; // opening stock (per resolution #2)
     photoUrl?: string; // optional product image (overrides category default)
     extraUnits?: { unitName: string; conversionToBase: number }[];
+    saleMode?: SaleMode;
+    fractionalPackAllowed?: boolean;
   }) => Item;
   updateItem: (id: number, data: Partial<Item>) => void;
   softDeleteItem: (id: number) => { ok: boolean; error?: string };
@@ -270,6 +284,17 @@ const uid = (() => {
 const tempId = () => Math.random().toString(36).slice(2, 9);
 const now = () => new Date().toISOString();
 
+const defaultShopConfig: ShopConfig = {
+  shopId: 1,
+  shopName: "Hardware Shop",
+  itemDeletionWindowDays: 90,
+  lowStockThresholdDefault: 10,
+  baseUnitDefault: "Piece",
+  khataReminderThresholdDays: 7,
+  khataReminderThresholdAmount: 1000,
+  language: "en",
+};
+
 // Per resolution #1 — client-generated UUID for idempotency
 const generateUuid = () =>
   "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -295,15 +320,68 @@ const initialDraftPurchase = {
 };
 
 export const useApp = create<AppState>()(
-  persist(
     (set, get) => ({
       isAuthed: false,
-      login: (pin) => {
-        if (pin === "1234") {
-          set({ isAuthed: true, screen: "dashboard" });
-          return true;
+      pinConfigured: false,
+      initializeLocalAuth: async () => {
+        if (typeof window === "undefined") return;
+        set({ pinConfigured: await hasLocalPin() });
+      },
+      setOwnerPin: async (pin) => {
+        await setLocalPin(pin);
+        set({ pinConfigured: true });
+      },
+      login: async (pin) => {
+        if (typeof window === "undefined") return false;
+        try {
+          if (await verifyLocalPin(pin)) {
+            set({ isAuthed: true, screen: "dashboard" });
+            void get().hydrateFromServer();
+            return true;
+          }
+          return false;
+        } catch (error) {
+          console.error("Local login failed", error);
+          return false;
         }
-        return false;
+      },
+      hydrateFromServer: async () => {
+        const local = await loadLocalSnapshot().catch(() => null);
+        if (local) set(local);
+        try {
+          const response = await fetch("/api/bootstrap", { credentials: "include" });
+          if (!response.ok) return Boolean(local);
+          const payload = (await response.json()) as Partial<AppState>;
+          set({
+            ...payload,
+            isAuthed: true,
+          });
+          await saveLocalSnapshot({
+            shopConfig: payload.shopConfig ?? defaultShopConfig,
+            categories: payload.categories ?? [],
+            items: payload.items ?? [],
+            customers: payload.customers ?? [],
+            suppliers: payload.suppliers ?? [],
+            saleBills: payload.saleBills ?? [],
+            purchaseBills: payload.purchaseBills ?? [],
+            returns: payload.returns ?? [],
+            khataTransactions: payload.khataTransactions ?? [],
+            notifications: payload.notifications ?? [],
+            rateHistory: payload.rateHistory ?? [],
+            aiSessions: payload.aiSessions ?? [],
+            stockAdjustments: payload.stockAdjustments ?? [],
+            categoryImages: payload.categoryImages ?? [],
+            inventoryMovements: payload.inventoryMovements ?? [],
+            auditLogs: payload.auditLogs ?? [],
+            attributes: payload.attributes ?? [],
+            attributeOptions: payload.attributeOptions ?? [],
+            payments: payload.payments ?? [],
+          });
+          return true;
+        } catch (error) {
+          console.error("Bootstrap failed; using local database", error);
+          return Boolean(local);
+        }
       },
 
       screen: "dashboard",
@@ -326,7 +404,7 @@ export const useApp = create<AppState>()(
       };
     }),
 
-  shopConfig: seedShopConfig,
+  shopConfig: defaultShopConfig,
   updateShopConfig: (patch) =>
     set((s) => ({ shopConfig: { ...s.shopConfig, ...patch } })),
 
@@ -335,26 +413,28 @@ export const useApp = create<AppState>()(
   setOnline: (online) => {
     set({ isOnline: online });
     if (online) {
-      // Use setTimeout so the state update commits first
-      setTimeout(() => get().pushSync(), 100);
+      get().pushSync();
     }
   },
 
-  categories: seedCategories,
-  items: seedItems,
-  customers: seedCustomers,
-  suppliers: seedSuppliers,
-  saleBills: seedSaleBills,
-  purchaseBills: seedPurchaseBills,
+  categories: [],
+  items: [],
+  customers: [],
+  suppliers: [],
+  saleBills: [],
+  purchaseBills: [],
   returns: [],
-  khataTransactions: seedKhataTransactions,
-  notifications: seedNotifications,
-  rateHistory: seedRateHistory,
-  aiSessions: seedAiImportSessions,
-  stockAdjustments: seedStockAdjustments,
-  categoryImages: seedCategoryImages,
+  khataTransactions: [],
+  notifications: [],
+  rateHistory: [],
+  aiSessions: [],
+  stockAdjustments: [],
+  categoryImages: [],
   inventoryMovements: [],
   auditLogs: [],
+  attributes: [],
+  attributeOptions: [],
+  payments: [],
 
   draftItemPhoto: undefined,
   setDraftItemPhoto: (url) => set({ draftItemPhoto: url }),
@@ -380,6 +460,7 @@ export const useApp = create<AppState>()(
   },
 
   addImageToCategoryLibrary: (categoryId, url, makeDefault) => {
+    
     const ts = now();
     const newImg: CategoryImage = {
       id: uid(),
@@ -418,6 +499,7 @@ export const useApp = create<AppState>()(
   },
 
   setCategoryDefaultImage: (categoryId, imageId) => {
+    
     set((st) => {
       const img = st.categoryImages.find((i) => i.id === imageId);
       if (!img) return {};
@@ -437,6 +519,7 @@ export const useApp = create<AppState>()(
   },
 
   deleteCategoryImage: (imageId) => {
+    
     set((st) => {
       const img = st.categoryImages.find((i) => i.id === imageId);
       if (!img) return {};
@@ -480,6 +563,7 @@ export const useApp = create<AppState>()(
     get().categoryImages.filter((i) => i.categoryId === categoryId),
 
   setItemPhoto: (itemId, url) => {
+    
     set((st) => ({
       items: st.items.map((i) =>
         i.id === itemId ? { ...i, photoUrl: url, updatedAt: now() } : i
@@ -561,6 +645,7 @@ export const useApp = create<AppState>()(
             unitId,
             qty: isEstimatedWeight ? (roundedGrams ?? qty) : qty,
             lineTotal,
+            saleMode: (item.saleMode as SaleMode | null | undefined) ?? "QTY",
             customUnitPrice,
             isEstimatedWeight,
             ratePerKg,
@@ -580,11 +665,17 @@ export const useApp = create<AppState>()(
     })),
   draftSaleSetCustomer: (id) => set((s) => ({ draftSale: { ...s.draftSale, customerId: id } })),
   draftSaleSetPayment: (t) => set((s) => ({ draftSale: { ...s.draftSale, paymentType: t } })),
+  draftSaleSetAmountPaid: (amount) => set((s) => ({ draftSale: { ...s.draftSale, amountPaid: amount } })),
   draftSaleTotal: () => get().draftSale.lines.reduce((sum, l) => sum + l.lineTotal, 0),
 
   commitSale: () => {
     const s = get();
     const total = round2(s.draftSale.lines.reduce((sum, l) => sum + l.lineTotal, 0));
+    const paid = round2(s.draftSale.amountPaid ?? (s.draftSale.paymentType === "cash" ? total : 0));
+    if ((s.draftSale.paymentType === "udhaar" || s.draftSale.paymentType === "partial") && !s.draftSale.customerId) {
+      throw new Error("Credit and partial sales require a customer");
+    }
+    if (paid > total) throw new Error("Payment cannot exceed the bill total");
     const billId = uid();
     const billUuid = generateUuid(); // client-generated, for idempotency
 
@@ -596,6 +687,9 @@ export const useApp = create<AppState>()(
       customerId: s.draftSale.customerId,
       billDate: now(),
       paymentType: s.draftSale.paymentType,
+      amountPaid: paid,
+      outstandingAmount: round2(total - paid),
+      paymentStatus: paid === total ? "paid" : paid > 0 ? "partial" : "unpaid",
       totalAmount: total,
       syncStatus: "pending",
       createdAt: now(),
@@ -614,6 +708,7 @@ export const useApp = create<AppState>()(
           qtyInBaseUnit: qtyBase,
           unitPriceAtSale: l.customUnitPrice ?? item.pricePerBaseUnit,
           lineTotal: l.lineTotal,
+          saleMode: l.saleMode ?? (item.saleMode as SaleMode | null | undefined) ?? "QTY",
           isEstimatedWeight: l.isEstimatedWeight,
           ratePerKg: l.ratePerKg,
           unroundedGrams: l.unroundedGrams,
@@ -731,10 +826,23 @@ export const useApp = create<AppState>()(
     });
 
     // Per resolution #1: immediately try POST /sales if online (single canonical flow)
-    if (get().isOnline) {
-      // Use setTimeout so UI updates first, then async push
-      setTimeout(() => get().pushBill(billUuid), 200);
-    }
+    void createLocalSale({
+      uuid: billUuid,
+      customerId: bill.customerId,
+      paymentType: bill.paymentType,
+      amountPaid: bill.amountPaid,
+      lines: bill.lines.map((line) => ({
+        itemId: line.itemId,
+        unitId: line.unitId,
+        qty: line.qtyInSoldUnit,
+        unitPrice: line.negotiatedPrice,
+        saleMode: line.saleMode,
+        estimatedWeight: line.isEstimatedWeight && line.ratePerKg
+          ? { ratePerKg: line.ratePerKg, saleAmount: line.lineTotal }
+          : undefined,
+      })),
+    }).catch((error) => console.error("Local sale transaction failed", error));
+    if (get().isOnline) get().pushBill(billUuid);
 
     return bill;
   },
@@ -876,14 +984,25 @@ export const useApp = create<AppState>()(
       };
     });
 
-    if (get().isOnline) {
-      setTimeout(() => get().pushBill(billUuid), 200);
-    }
+    void createLocalPurchase({
+      uuid: billUuid,
+      supplierId: bill.supplierId,
+      paymentType: bill.paymentType,
+      amountPaid: bill.amountPaid,
+      lines: bill.lines.map((line) => ({
+        itemId: line.itemId,
+        unitId: line.unitId,
+        qty: line.qtyInPurchasedUnit,
+        unitCost: line.unitCost,
+      })),
+    }).catch((error) => console.error("Local purchase transaction failed", error));
+    if (get().isOnline) get().pushBill(billUuid);
     return bill;
   },
 
   // Per resolution #2 — addItem now takes initialQtyInBaseUnit
   addItem: (data) => {
+    
     const id = uid();
     const ts = now();
     const baseUnit: ItemUnit = {
@@ -907,6 +1026,11 @@ export const useApp = create<AppState>()(
       shopId: 1,
       categoryId: data.categoryId,
       name: data.name,
+      urduName: data.urduName,
+      skuCode: data.skuCode,
+      brand: data.brand,
+      specification: data.specification,
+      notes: data.notes,
       icon: data.icon,
       photoUrl: data.photoUrl, // optional product image
       baseUnitName: data.baseUnitName,
@@ -914,6 +1038,8 @@ export const useApp = create<AppState>()(
       qtyInBaseUnit: data.initialQtyInBaseUnit, // current stock = opening stock at creation
       pricePerBaseUnit: data.pricePerBaseUnit,
       lowStockThreshold: data.lowStockThreshold,
+      saleMode: data.saleMode ?? "QTY",
+      fractionalPackAllowed: data.fractionalPackAllowed ?? false,
       isActive: true,
       units: [baseUnit, ...extras],
       createdAt: ts,
@@ -946,6 +1072,7 @@ export const useApp = create<AppState>()(
     if (!existing) return;
     const oldPrice = existing.pricePerBaseUnit;
     const newPrice = data.pricePerBaseUnit ?? oldPrice;
+    
     set((st) => {
       let newHistory = st.rateHistory;
       if (data.pricePerBaseUnit !== undefined && newPrice !== oldPrice) {
@@ -983,6 +1110,7 @@ export const useApp = create<AppState>()(
         error: `Item is on a bill in the last ${windowDays} days`,
       };
     }
+    
     set((st) => ({
       items: st.items.map((i) => (i.id === id ? { ...i, isActive: false, updatedAt: now() } : i)),
     }));
@@ -991,6 +1119,7 @@ export const useApp = create<AppState>()(
 
   // Per resolution #2 — new Stock Adjustment feature
   adjustStock: (itemId, type, deltaInBaseUnit, reason) => {
+    
     const s = get();
     const item = s.items.find((i) => i.id === itemId);
     if (!item) return { ok: false, error: "Item not found" };
@@ -1065,6 +1194,7 @@ export const useApp = create<AppState>()(
   },
 
   addCategory: (name, icon) => {
+    
     const ts = now();
     const c: Category = {
       id: uid(),
@@ -1083,11 +1213,13 @@ export const useApp = create<AppState>()(
     const s = get();
     const check = canDeleteCategory(s.items, id);
     if (!check.ok) return check;
+    
     set((st) => ({ categories: st.categories.filter((c) => c.id !== id) }));
     return { ok: true };
   },
 
   addCustomer: (name, phone) => {
+    
     const s = get();
     let warning: string | undefined;
     if (phone) {
@@ -1111,6 +1243,7 @@ export const useApp = create<AppState>()(
     return { ok: true, customer, warning };
   },
   addSupplier: (name, phone) => {
+    
     const s = get();
     let warning: string | undefined;
     if (phone) {
@@ -1131,31 +1264,22 @@ export const useApp = create<AppState>()(
     return { ok: true, supplier, warning };
   },
   recordCustomerPayment: (customerId, amount, note) => {
-    set((st) => {
-      const newTxns = [
-        ...st.khataTransactions,
-        {
-          id: uid(),
-          partyType: "customer" as PartyType,
-          partyId: customerId,
-          transactionType: "payment_received" as KhataTxnType,
-          amount,
-          note,
-          transactionDate: now(),
-          createdAt: now(),
-        },
-      ];
-      return {
-        khataTransactions: newTxns,
-        customers: st.customers.map((c) =>
-          c.id === customerId
-            ? { ...c, khataBalance: computeBalance(newTxns, "customer", customerId), updatedAt: now() }
-            : c
-        ),
-      };
-    });
+    void recordLocalPayment({
+      uuid: generateUuid(),
+      partyType: "customer",
+      partyId: customerId,
+      amount,
+      method: "cash",
+      note,
+    })
+      .then(async () => {
+        const local = await loadLocalSnapshot();
+        if (local) set(local);
+      })
+      .catch((error) => console.error("Local customer payment failed", error));
   },
   recordSupplierPayment: (supplierId, amount, note) => {
+    
     set((st) => {
       const newTxns = [
         ...st.khataTransactions,
@@ -1182,6 +1306,7 @@ export const useApp = create<AppState>()(
   },
 
   recordReturn: (saleBillLineId, qtyReturnedInBaseUnit, reason, disposition) => {
+    
     const s = get();
     const line = s.saleBills.flatMap((b) => b.lines).find((l) => l.id === saleBillLineId);
     if (!line) return { ok: false, error: "Original sale line not found" };
@@ -1271,6 +1396,7 @@ export const useApp = create<AppState>()(
   },
 
   cancelSaleBill: (id, reason) => {
+    
     const s = get();
     const bill = s.saleBills.find((b) => b.id === id);
     if (!bill) return { ok: false, error: "Bill not found" };
@@ -1438,36 +1564,38 @@ export const useApp = create<AppState>()(
     get().saleBills.filter((b) => b.syncStatus === "pending" || b.syncStatus === "failed").length +
     get().purchaseBills.filter((b) => b.syncStatus === "pending" || b.syncStatus === "failed").length,
 
-  // pushBill — pushes a single bill by UUID. Server-side idempotency:
-  // if a bill with this UUID already exists, server returns 200 OK with the existing record
-  // (we model this by always marking synced on success).
   pushBill: (billUuid) => {
-    set((st) => {
-      // Mark as syncing first (UI feedback)
-      const markSyncing = (b: SaleBill | PurchaseBill): SaleBill | PurchaseBill =>
-        b.uuid === billUuid && (b.syncStatus === "pending" || b.syncStatus === "failed")
-          ? { ...b, syncStatus: "syncing" as SyncStatus }
-          : b;
-      return {
-        saleBills: st.saleBills.map(markSyncing),
-        purchaseBills: st.purchaseBills.map(markSyncing),
-      };
+    const sale = get().saleBills.find((bill) => bill.uuid === billUuid);
+    const purchase = get().purchaseBills.find((bill) => bill.uuid === billUuid);
+    if (!sale && !purchase) return;
+    set((st) => ({
+      saleBills: st.saleBills.map((bill) => bill.uuid === billUuid ? { ...bill, syncStatus: "syncing" } : bill),
+      purchaseBills: st.purchaseBills.map((bill) => bill.uuid === billUuid ? { ...bill, syncStatus: "syncing" } : bill),
+    }));
+    void fetch(sale ? "/api/sales" : "/api/purchases", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(sale ? {
+        uuid: sale.uuid, customerId: sale.customerId, paymentType: sale.paymentType,
+        amountPaid: sale.amountPaid ?? (sale.paymentType === "cash" ? sale.totalAmount : 0),
+        lines: sale.lines.map((line) => ({ itemId: line.itemId, unitId: line.unitId, qty: line.qtyInSoldUnit, unitPrice: line.negotiatedPrice ?? line.unitPriceAtSale, ...(line.isEstimatedWeight && line.ratePerKg ? { estimatedWeight: { ratePerKg: line.ratePerKg, saleAmount: line.lineTotal } } : {}) })),
+      } : {
+        uuid: purchase!.uuid, supplierId: purchase!.supplierId, paymentType: purchase!.paymentType,
+        amountPaid: purchase!.amountPaid ?? (purchase!.paymentType === "cash" ? purchase!.totalAmount : 0),
+        lines: purchase!.lines.map((line) => ({ itemId: line.itemId, unitId: line.unitId, qty: line.qtyInPurchasedUnit, unitCost: line.unitCost })),
+      }),
+    }).then((response) => {
+      set((st) => ({
+        saleBills: st.saleBills.map((bill) => bill.uuid === billUuid ? { ...bill, syncStatus: response.ok ? "synced" : "failed", updatedAt: now() } : bill),
+        purchaseBills: st.purchaseBills.map((bill) => bill.uuid === billUuid ? { ...bill, syncStatus: response.ok ? "synced" : "failed", updatedAt: now() } : bill),
+      }));
+    }).catch(() => {
+      set((st) => ({
+        saleBills: st.saleBills.map((bill) => bill.uuid === billUuid ? { ...bill, syncStatus: "failed" } : bill),
+        purchaseBills: st.purchaseBills.map((bill) => bill.uuid === billUuid ? { ...bill, syncStatus: "failed" } : bill),
+      }));
     });
-
-    // Simulate network round-trip — POST /sales or POST /purchases
-    // Server checks UUID for idempotency. If UUID exists, returns existing record (no duplicate).
-    setTimeout(() => {
-      set((st) => {
-        const markSynced = (b: SaleBill | PurchaseBill): SaleBill | PurchaseBill =>
-          b.uuid === billUuid && b.syncStatus === "syncing"
-            ? { ...b, syncStatus: "synced" as SyncStatus, updatedAt: now() }
-            : b;
-        return {
-          saleBills: st.saleBills.map(markSynced),
-          purchaseBills: st.purchaseBills.map(markSynced),
-        };
-      });
-    }, 800); // simulate network latency
   },
 
   // Batch wrapper around pushBill — for offline queue (per resolution #1)
@@ -1477,24 +1605,26 @@ export const useApp = create<AppState>()(
       ...s.saleBills.filter((b) => b.syncStatus === "pending" || b.syncStatus === "failed"),
       ...s.purchaseBills.filter((b) => b.syncStatus === "pending" || b.syncStatus === "failed"),
     ];
-    pending.forEach((b, i) => {
-      // Stagger pushes so they don't all hit the server at once
-      setTimeout(() => get().pushBill(b.uuid), i * 300);
-    });
+    pending.forEach((b) => get().pushBill(b.uuid));
   },
 
-  markNotificationRead: (id) =>
+  markNotificationRead: (id) => {
+    
     set((st) => ({
       notifications: st.notifications.map((n) =>
         n.id === id ? { ...n, isRead: true } : n
       ),
-    })),
-  markAllNotificationsRead: () =>
+    }));
+  },
+  markAllNotificationsRead: () => {
+    
     set((st) => ({
       notifications: st.notifications.map((n) => ({ ...n, isRead: true })),
-    })),
+    }));
+  },
   // Per resolution #7 — Khata reminder trigger rule
   triggerKhataReminders: () => {
+    void generateLocalNotifications().catch((error) => console.error("Local notification generation failed", error));
     const s = get();
     const cfg = s.shopConfig;
     const nowMs = Date.now();
@@ -1554,6 +1684,7 @@ export const useApp = create<AppState>()(
   },
   // Per resolution #2 — confirm requires base_unit_name + low_stock_threshold
   confirmAiImport: (sessionId, rows) => {
+    
     let added = 0;
     set((st) => {
       const ts = now();
@@ -1623,38 +1754,59 @@ export const useApp = create<AppState>()(
   supplierBalance: (supplierId) =>
     computeBalance(get().khataTransactions, "supplier", supplierId),
     }),
-    {
-      name: "hardware_shop_storage_v1",
-      partialize: (state) => ({
-        isAuthed: state.isAuthed,
-        shopConfig: state.shopConfig,
-        categories: state.categories,
-        items: state.items,
-        customers: state.customers,
-        suppliers: state.suppliers,
-        saleBills: state.saleBills,
-        purchaseBills: state.purchaseBills,
-        returns: state.returns,
-        khataTransactions: state.khataTransactions,
-        notifications: state.notifications,
-        rateHistory: state.rateHistory,
-        aiSessions: state.aiSessions,
-        stockAdjustments: state.stockAdjustments,
-        categoryImages: state.categoryImages,
-        inventoryMovements: state.inventoryMovements,
-        auditLogs: state.auditLogs,
-      }),
-    }
-  )
 );
+
+if (typeof window !== "undefined") {
+  let localWriteQueue = Promise.resolve();
+  useApp.subscribe((state) => {
+    localWriteQueue = localWriteQueue
+      .then(() =>
+        saveLocalSnapshot({
+          shopConfig: state.shopConfig,
+          categories: state.categories,
+          items: state.items,
+          customers: state.customers,
+          suppliers: state.suppliers,
+          saleBills: state.saleBills,
+          purchaseBills: state.purchaseBills,
+          returns: state.returns,
+          khataTransactions: state.khataTransactions,
+          notifications: state.notifications,
+          rateHistory: state.rateHistory,
+          aiSessions: state.aiSessions,
+          stockAdjustments: state.stockAdjustments,
+          categoryImages: state.categoryImages,
+          inventoryMovements: state.inventoryMovements,
+          auditLogs: state.auditLogs,
+          attributes: state.attributes,
+          attributeOptions: state.attributeOptions,
+          payments: state.payments,
+        })
+      )
+      .catch((error) => {
+        console.error("Local database write failed", error);
+      });
+  });
+  void useApp.getState().initializeLocalAuth();
+  void fetch("/api/session", { credentials: "include" })
+    .then((response) => response.json() as Promise<{ authenticated: boolean }>)
+    .then((session) => {
+      if (session.authenticated) return useApp.getState().hydrateFromServer();
+      useApp.setState({ isAuthed: false });
+      return false;
+    })
+    .catch(() => {
+      useApp.setState({ isAuthed: false });
+    });
+}
 
 // ============================================================
 // Misc helpers (pure, exported separately)
 // ============================================================
 
 // Per resolution #5 — money rounding rule (2 decimals)
-export const fmtRs = (n: number) => {
-  const rounded = round2(n);
+export const fmtRs = (n: number | undefined) => {
+  const rounded = round2(n ?? 0);
   if (Number.isInteger(rounded)) {
     return "Rs. " + rounded.toLocaleString("en-PK");
   }

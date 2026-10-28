@@ -17,6 +17,7 @@ export const metadata: Metadata = {
   title: "Hardware Shop — POS & Inventory Management",
   description: "Mobile-first POS, bilingual inventory, and Khata ledger for retail hardware shops.",
   keywords: ["Hardware Shop", "POS", "Inventory", "Khata", "Next.js", "Retail"],
+  manifest: "/manifest.webmanifest",
 };
 
 export default function RootLayout({
@@ -25,7 +26,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" dir="ltr" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >

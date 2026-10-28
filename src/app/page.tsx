@@ -24,15 +24,26 @@ import {
 import { CustomerCatalogScreen } from "@/components/screens/CustomerCatalogScreen";
 import { CategoryImageLibraryScreen } from "@/components/screens/CategoryImageLibraryScreen";
 import { CategoryImagePickScreen } from "@/components/screens/CategoryImagePickScreen";
+import { ReportsScreen } from "@/components/screens/ReportsScreen";
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
   const isAuthed = useApp((s) => s.isAuthed);
   const screen = useApp((s) => s.screen);
+  const language = useApp((s) => s.shopConfig.language ?? "en");
 
   useEffect(() => {
     setMounted(true);
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker.register("/sw.js");
+    }
   }, []);
+
+  useEffect(() => {
+    document.documentElement.lang = language;
+    document.documentElement.dir = language === "ur" ? "rtl" : "ltr";
+    document.documentElement.style.fontFamily = language === "ur" ? "Noto Naskh Arabic, var(--font-geist-sans)" : "var(--font-geist-sans)";
+  }, [language]);
 
   if (!mounted) {
     return (
@@ -69,9 +80,9 @@ export default function Home() {
         {screen === "customer-catalog" && <CustomerCatalogScreen />}
         {screen === "category-images" && <CategoryImageLibraryScreen />}
         {screen === "category-image-pick" && <CategoryImagePickScreen />}
+        {screen === "reports" && <ReportsScreen />}
       </main>
       <BottomTabBar />
     </div>
   );
 }
-
