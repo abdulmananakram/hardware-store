@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
     stockAdjustments,
     inventoryMovements,
     auditLogs,
+    attributes,
   ] = await Promise.all([
     db.shopConfig.findFirst(),
     db.category.findMany({ include: { images: true }, orderBy: { name: "asc" } }),
@@ -35,6 +36,7 @@ export async function GET(request: NextRequest) {
     db.stockAdjustment.findMany({ orderBy: { adjustedAt: "desc" } }),
     db.inventoryMovement.findMany({ orderBy: { createdAt: "desc" } }),
     db.auditLog.findMany({ orderBy: { createdAt: "desc" } }),
+    db.catalogueAttribute.findMany({ include: { options: true }, orderBy: { sortOrder: "asc" } }),
   ]);
   return NextResponse.json({
     shopConfig: shopConfig ?? {
@@ -61,6 +63,7 @@ export async function GET(request: NextRequest) {
     auditLogs,
     categoryImages: categories.flatMap((category) => category.images),
     aiSessions: [],
+    attributes,
+    attributeOptions: attributes.flatMap((attribute) => attribute.options),
   });
 }
-

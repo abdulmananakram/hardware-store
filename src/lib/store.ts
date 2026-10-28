@@ -28,6 +28,9 @@ import {
   SyncStatus,
   InventoryMovement,
   AuditLog,
+  SaleMode,
+  CatalogueAttribute,
+  CatalogueAttributeOption,
 } from "./types";
 import { loadLocalSnapshot, saveLocalSnapshot } from "./localDb";
 import { hasLocalPin, setLocalPin, verifyLocalPin } from "./localAuth";
@@ -85,6 +88,8 @@ interface AppState {
   categoryImages: CategoryImage[]; // library per category
   inventoryMovements: InventoryMovement[]; // Permanent inventory ledger (Section 4 & 9)
   auditLogs: AuditLog[]; // Audit trail (Section 12)
+  attributes: CatalogueAttribute[];
+  attributeOptions: CatalogueAttributeOption[];
 
   // ============================================================
   // Image library actions (per Category image library feature)
@@ -125,6 +130,7 @@ interface AppState {
       unitId: number;
       qty: number;
       lineTotal: number;
+      saleMode?: SaleMode;
       customUnitPrice?: number;
       isEstimatedWeight?: boolean;
       ratePerKg?: number;
@@ -171,6 +177,10 @@ interface AppState {
   addItem: (data: {
     name: string;
     urduName?: string;
+    skuCode?: string;
+    brand?: string;
+    specification?: string;
+    notes?: string;
     categoryId: number;
     baseUnitName: string;
     pricePerBaseUnit: number;
@@ -179,6 +189,8 @@ interface AppState {
     initialQtyInBaseUnit: number; // opening stock (per resolution #2)
     photoUrl?: string; // optional product image (overrides category default)
     extraUnits?: { unitName: string; conversionToBase: number }[];
+    saleMode?: SaleMode;
+    fractionalPackAllowed?: boolean;
   }) => Item;
   updateItem: (id: number, data: Partial<Item>) => void;
   softDeleteItem: (id: number) => { ok: boolean; error?: string };
@@ -368,6 +380,8 @@ export const useApp = create<AppState>()(
             categoryImages: payload.categoryImages ?? [],
             inventoryMovements: payload.inventoryMovements ?? [],
             auditLogs: payload.auditLogs ?? [],
+            attributes: payload.attributes ?? [],
+            attributeOptions: payload.attributeOptions ?? [],
           });
           return true;
         } catch (error) {
@@ -424,6 +438,8 @@ export const useApp = create<AppState>()(
   categoryImages: [],
   inventoryMovements: [],
   auditLogs: [],
+  attributes: [],
+  attributeOptions: [],
 
   draftItemPhoto: undefined,
   setDraftItemPhoto: (url) => set({ draftItemPhoto: url }),
@@ -686,6 +702,7 @@ export const useApp = create<AppState>()(
             unitId,
             qty: isEstimatedWeight ? (roundedGrams ?? qty) : qty,
             lineTotal,
+            saleMode: (item.saleMode as SaleMode | null | undefined) ?? "QTY",
             customUnitPrice,
             isEstimatedWeight,
             ratePerKg,
@@ -739,6 +756,7 @@ export const useApp = create<AppState>()(
           qtyInBaseUnit: qtyBase,
           unitPriceAtSale: l.customUnitPrice ?? item.pricePerBaseUnit,
           lineTotal: l.lineTotal,
+          saleMode: l.saleMode ?? (item.saleMode as SaleMode | null | undefined) ?? "QTY",
           isEstimatedWeight: l.isEstimatedWeight,
           ratePerKg: l.ratePerKg,
           unroundedGrams: l.unroundedGrams,
@@ -1041,6 +1059,10 @@ export const useApp = create<AppState>()(
       categoryId: data.categoryId,
       name: data.name,
       urduName: data.urduName,
+      skuCode: data.skuCode,
+      brand: data.brand,
+      specification: data.specification,
+      notes: data.notes,
       icon: data.icon,
       photoUrl: data.photoUrl, // optional product image
       baseUnitName: data.baseUnitName,
@@ -1048,6 +1070,8 @@ export const useApp = create<AppState>()(
       qtyInBaseUnit: data.initialQtyInBaseUnit, // current stock = opening stock at creation
       pricePerBaseUnit: data.pricePerBaseUnit,
       lowStockThreshold: data.lowStockThreshold,
+      saleMode: data.saleMode ?? "QTY",
+      fractionalPackAllowed: data.fractionalPackAllowed ?? false,
       isActive: true,
       units: [baseUnit, ...extras],
       createdAt: ts,
@@ -2055,6 +2079,8 @@ if (typeof window !== "undefined") {
           categoryImages: state.categoryImages,
           inventoryMovements: state.inventoryMovements,
           auditLogs: state.auditLogs,
+          attributes: state.attributes,
+          attributeOptions: state.attributeOptions,
         })
       )
       .catch((error) => {

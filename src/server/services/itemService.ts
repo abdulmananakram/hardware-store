@@ -11,11 +11,17 @@ export const getItem = (id: number) =>
 export const createItem = async (input: {
   name: string;
   urduName?: string;
+  skuCode?: string;
+  brand?: string;
+  specification?: string;
+  notes?: string;
   categoryId: number;
   baseUnitName: string;
   pricePerBaseUnit: number;
   costPerBaseUnit?: number;
   lowStockThreshold: number;
+  saleMode?: "QTY" | "PACK" | "WEIGHT" | "AMOUNT_EST";
+  fractionalPackAllowed?: boolean;
   icon?: string;
   initialQtyInBaseUnit?: number;
   photoUrl?: string;
@@ -34,11 +40,17 @@ export const createItem = async (input: {
       data: {
         name: input.name.trim(),
         urduName: input.urduName?.trim() || null,
+        skuCode: input.skuCode?.trim() || null,
+        brand: input.brand?.trim() || null,
+        specification: input.specification?.trim() || null,
+        notes: input.notes?.trim() || null,
         categoryId: input.categoryId,
         baseUnitName: input.baseUnitName.trim(),
         pricePerBaseUnit: input.pricePerBaseUnit,
         costPerBaseUnit: input.costPerBaseUnit,
         lowStockThreshold: input.lowStockThreshold,
+        saleMode: input.saleMode ?? "QTY",
+        fractionalPackAllowed: input.fractionalPackAllowed ?? false,
         icon: input.icon ?? "📦",
         initialQtyInBaseUnit: opening,
         qtyInBaseUnit: opening,
@@ -86,4 +98,3 @@ export const updateItem = (id: number, data: Record<string, unknown>) =>
 
 export const deactivateItem = (id: number) =>
   db.item.update({ where: { id }, data: { isActive: false } });
-

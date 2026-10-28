@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Sheet } from "@/components/parts/Sheet";
+import type { SaleMode } from "@/lib/types";
 
 const EMOJI_OPTIONS = ["📍", "🪛", "🔒", "🚪", "⚙️", "🔩", "🛠️", "🎨", "📦", "🧱", "🪚", "🛢️"];
 
@@ -24,6 +25,13 @@ export function ItemAddEditScreen() {
   const editing = params.itemId ? items.find((i) => i.id === params.itemId) : null;
   const [name, setName] = useState(editing?.name || "");
   const [urduName, setUrduName] = useState(editing?.urduName || "");
+  const [skuCode, setSkuCode] = useState(editing?.skuCode || "");
+  const [brand, setBrand] = useState(editing?.brand || "");
+  const [specification, setSpecification] = useState(editing?.specification || "");
+  const [saleMode, setSaleMode] = useState<SaleMode>(
+    (editing?.saleMode as SaleMode | null | undefined) || "QTY"
+  );
+  const [fractionalPackAllowed, setFractionalPackAllowed] = useState(editing?.fractionalPackAllowed ?? false);
   const [icon, setIcon] = useState(editing?.icon || "📦");
   const [categoryId, setCategoryId] = useState<number | null>(editing?.categoryId || null);
   // Per resolution #2: initial_qty_in_base_unit (only used when creating)
@@ -116,6 +124,11 @@ export function ItemAddEditScreen() {
       updateItem(editing.id, {
         name: name.trim(),
         urduName: urduName.trim() || undefined,
+        skuCode: skuCode.trim() || undefined,
+        brand: brand.trim() || undefined,
+        specification: specification.trim() || undefined,
+        saleMode,
+        fractionalPackAllowed,
         icon,
         categoryId: categoryId!,
         baseUnitName: baseUnitName.trim(),
@@ -130,6 +143,11 @@ export function ItemAddEditScreen() {
       addItem({
         name: name.trim(),
         urduName: urduName.trim() || undefined,
+        skuCode: skuCode.trim() || undefined,
+        brand: brand.trim() || undefined,
+        specification: specification.trim() || undefined,
+        saleMode,
+        fractionalPackAllowed,
         categoryId: categoryId!,
         baseUnitName: baseUnitName.trim(),
         pricePerBaseUnit: parseFloat(price),
@@ -158,6 +176,43 @@ export function ItemAddEditScreen() {
   return (
     <div className="px-3 pt-3 pb-32">
       <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <Label className="text-[11px] font-bold uppercase text-slate-500">SKU Code</Label>
+            <Input value={skuCode} onChange={(e) => setSkuCode(e.target.value)} placeholder="Optional code" />
+          </div>
+          <div>
+            <Label className="text-[11px] font-bold uppercase text-slate-500">Brand</Label>
+            <Input value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="Optional brand" />
+          </div>
+        </div>
+        <div>
+          <Label className="text-[11px] font-bold uppercase text-slate-500">Size / Specification</Label>
+          <Input value={specification} onChange={(e) => setSpecification(e.target.value)} placeholder="e.g. 2 inch, M8" />
+        </div>
+        <div>
+          <Label className="text-[11px] font-bold uppercase text-slate-500">Sale Mode</Label>
+          <select
+            value={saleMode}
+            onChange={(e) => setSaleMode(e.target.value as SaleMode)}
+            className="w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+          >
+            <option value="QTY">Quantity</option>
+            <option value="PACK">Pack / Box</option>
+            <option value="WEIGHT">Measured Weight</option>
+            <option value="AMOUNT_EST">Amount / Estimated Weight</option>
+          </select>
+          {saleMode === "PACK" && (
+            <label className="flex items-center gap-2 mt-2 text-xs text-slate-600">
+              <input
+                type="checkbox"
+                checked={fractionalPackAllowed}
+                onChange={(e) => setFractionalPackAllowed(e.target.checked)}
+              />
+              Allow half / fractional packs
+            </label>
+          )}
+        </div>
         {/* Product Photo (NEW) — pick from library, upload, or use category default */}
         <div>
           <Label className="text-[11px] font-bold uppercase text-slate-500">Product Photo</Label>

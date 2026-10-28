@@ -26,6 +26,7 @@ export type ReturnReason =
   | "other";
 export type ReturnDisposition = "back_to_sellable_stock" | "damaged_pile";
 export type AdjustmentType = "restock" | "correction" | "damage" | "loss" | "initial";
+export type SaleMode = "QTY" | "PACK" | "WEIGHT" | "AMOUNT_EST";
 
 // Child table — image in a category's library
 export interface CategoryImage {
@@ -68,6 +69,10 @@ export interface Item {
   categoryId: number;
   name: string;
   urduName?: string;
+  skuCode?: string | null;
+  brand?: string | null;
+  specification?: string | null;
+  notes?: string | null;
   photoUrl?: string;
   icon: string; // emoji fallback
   baseUnitName: string;
@@ -77,10 +82,30 @@ export interface Item {
   pricePerBaseUnit: number;
   costPerBaseUnit?: number; // last known cost (auto-derived from purchase line, per resolution #5)
   lowStockThreshold: number;
+  saleMode?: string | null;
+  fractionalPackAllowed?: boolean;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
   units: ItemUnit[];
+}
+
+export interface CatalogueAttribute {
+  id: number;
+  shopId: number;
+  categoryId: number;
+  name: string;
+  urduName?: string;
+  sortOrder: number;
+  options: CatalogueAttributeOption[];
+}
+
+export interface CatalogueAttributeOption {
+  id: number;
+  attributeId: number;
+  value: string;
+  urduValue?: string;
+  sortOrder: number;
 }
 
 // Child table
@@ -135,6 +160,7 @@ export interface SaleBillLine {
   qtyInBaseUnit: number;
   unitPriceAtSale: number; // per base unit, snapshot
   lineTotal: number;
+  saleMode?: SaleMode;
   // Per hardware_shop_pos_business_rules.md:
   isEstimatedWeight?: boolean;
   ratePerKg?: number;

@@ -8,6 +8,8 @@ import type {
   Customer,
   InventoryMovement,
   Item,
+  CatalogueAttribute,
+  CatalogueAttributeOption,
   KhataTransaction,
   PurchaseBill,
   RateHistoryEntry,
@@ -40,6 +42,8 @@ export interface LocalSnapshot {
   categoryImages: CategoryImage[];
   inventoryMovements: InventoryMovement[];
   auditLogs: AuditLog[];
+  attributes?: CatalogueAttribute[];
+  attributeOptions?: CatalogueAttributeOption[];
 }
 
 class HardwareShopDatabase extends Dexie {
@@ -59,6 +63,8 @@ class HardwareShopDatabase extends Dexie {
   categoryImages!: Table<CategoryImage, number>;
   inventoryMovements!: Table<InventoryMovement, number>;
   auditLogs!: Table<AuditLog, number>;
+  attributes!: Table<CatalogueAttribute, number>;
+  attributeOptions!: Table<CatalogueAttributeOption, number>;
 
   constructor() {
     super("hardware_shop_local_v1");
@@ -79,6 +85,8 @@ class HardwareShopDatabase extends Dexie {
       categoryImages: "id, categoryId, isDefault",
       inventoryMovements: "id, shopId, itemId, createdAt",
       auditLogs: "id, shopId, action, createdAt",
+      attributes: "id, shopId, categoryId, sortOrder",
+      attributeOptions: "id, attributeId, sortOrder",
     });
   }
 }
@@ -123,6 +131,8 @@ export async function saveLocalSnapshot(snapshot: LocalSnapshot): Promise<void> 
       localDb.categoryImages,
       localDb.inventoryMovements,
       localDb.auditLogs,
+      localDb.attributes,
+      localDb.attributeOptions,
     ],
     async () => {
       await localDb.settings.put({ key: "shopConfig", value: snapshot.shopConfig });
@@ -156,6 +166,10 @@ export async function saveLocalSnapshot(snapshot: LocalSnapshot): Promise<void> 
       await localDb.inventoryMovements.bulkPut(snapshot.inventoryMovements);
       await localDb.auditLogs.clear();
       await localDb.auditLogs.bulkPut(snapshot.auditLogs);
+      await localDb.attributes.clear();
+      await localDb.attributes.bulkPut(snapshot.attributes ?? []);
+      await localDb.attributeOptions.clear();
+      await localDb.attributeOptions.bulkPut(snapshot.attributeOptions ?? []);
     }
   );
 }

@@ -7,11 +7,17 @@ import { createItem, listItems } from "@/server/services/itemService";
 const itemSchema = z.object({
   name: z.string().min(1),
   urduName: z.string().optional(),
+  skuCode: z.string().optional(),
+  brand: z.string().optional(),
+  specification: z.string().optional(),
+  notes: z.string().optional(),
   categoryId: z.number().int().positive(),
   baseUnitName: z.string().min(1),
   pricePerBaseUnit: z.number().nonnegative(),
   costPerBaseUnit: z.number().nonnegative().optional(),
   lowStockThreshold: z.number().nonnegative(),
+  saleMode: z.enum(["QTY", "PACK", "WEIGHT", "AMOUNT_EST"]).optional(),
+  fractionalPackAllowed: z.boolean().optional(),
   icon: z.string().optional(),
   initialQtyInBaseUnit: z.number().nonnegative().optional(),
   photoUrl: z.string().optional(),
@@ -38,4 +44,3 @@ export async function POST(request: NextRequest) {
     return errorResponse(error);
   }
 }
-
