@@ -16,6 +16,7 @@ export function SaleNewScreen() {
   const draftSaleRemoveLine = useApp((s) => s.draftSaleRemoveLine);
   const draftSaleSetCustomer = useApp((s) => s.draftSaleSetCustomer);
   const draftSaleSetPayment = useApp((s) => s.draftSaleSetPayment);
+  const draftSaleSetAmountPaid = useApp((s) => s.draftSaleSetAmountPaid);
   const draftSaleTotal = useApp((s) => s.draftSaleTotal);
   const commitSale = useApp((s) => s.commitSale);
   const navigate = useApp((s) => s.navigate);
@@ -38,7 +39,7 @@ export function SaleNewScreen() {
   const [newCustName, setNewCustName] = useState("");
   const [newCustPhone, setNewCustPhone] = useState("");
   const [paid, setPaid] = useState("");
-  const [doneBill, setDoneBill] = useState<null | { id: number; total: number }>(null);
+  const [doneBill, setDoneBill] = useState<null | { id: number; total: number; paid: number; outstanding: number; roundingAdjustment: number }>(null);
 
   const filteredItems = useMemo(() => {
     let list = items.filter((i) => i.isActive);
@@ -95,11 +96,33 @@ export function SaleNewScreen() {
   };
 
   const handleConfirmPay = () => {
-    const bill = commitSale();
+    const paidAmount = draftSale.paymentType === "cash" ? (parseFloat(paid) || total) : draftSale.paymentType === "partial" ? parseFloat(paid) || 0 : 0;
+    if (paidAmount > total) {
+      setErr("Payment cannot exceed the bill total");
+      return;
+    }
+    if ((draftSale.paymentType === "udhaar" || draftSale.paymentType === "partial") && !draftSale.customerId) {
+      setErr("Credit and partial sales require a customer");
+      return;
+    }
+    draftSaleSetAmountPaid(paidAmount);
+    let bill;
+    try {
+      bill = commitSale();
+    } catch (error) {
+      setErr(error instanceof Error ? error.message : "Could not save bill");
+      return;
+    }
     setShowPay(false);
     setShowBill(false);
     setPaid("");
-    setDoneBill({ id: bill.id, total: bill.totalAmount });
+    setDoneBill({
+      id: bill.id,
+      total: bill.totalAmount,
+      paid: bill.amountPaid ?? 0,
+      outstanding: bill.outstandingAmount ?? 0,
+      roundingAdjustment: bill.roundingAdjustment ?? 0,
+    });
   };
 
   // Reset done toast
@@ -288,15 +311,12 @@ export function SaleNewScreen() {
                 <span className="font-extrabold text-xl">{fmtRs(total)}</span>
               </div>
 
-              {/* Payment type — per resolution #3: only full-cash or full-udhaar in v1 */}
+              {/* Payment type */}
               <div className="mt-3">
                 <div className="flex items-center justify-between">
                   <p className="text-[11px] font-bold uppercase text-slate-500">
                     Payment Type
                   </p>
-                  <span className="text-[10px] text-slate-400">
-                    v1: full cash or full udhaar only
-                  </span>
                 </div>
                 <div className="flex gap-2 mt-1">
                   <button
@@ -325,16 +345,29 @@ export function SaleNewScreen() {
                       Add to khata — customer required
                     </span>
                   </button>
+                  <button
+                    onClick={() => draftSaleSetPayment("partial")}
+                    className={`flex-1 py-2.5 rounded-lg border-2 font-bold text-sm transition ${
+                      draftSale.paymentType === "partial"
+                        ? "bg-blue-50 border-blue-500 text-blue-700"
+                        : "border-slate-200 text-slate-600"
+                    }`}
+                  >
+                    💳 Partial
+                    <span className="block text-[10px] font-normal text-slate-500">
+                      Pay some, add rest to khata
+                    </span>
+                  </button>
                 </div>
-                {draftSale.paymentType === "udhaar" && !draftSale.customerId && (
+                {(draftSale.paymentType === "udhaar" || draftSale.paymentType === "partial") && !draftSale.customerId && (
                   <p className="text-[11px] text-amber-700 bg-amber-50 p-2 rounded-lg mt-2 font-semibold">
-                    ⚠ Udhaar requires a customer. Pick one below.
+                    ⚠ Credit and partial sales require a customer. Pick one below.
                   </p>
                 )}
               </div>
 
               {/* Customer — required for udhaar */}
-              {draftSale.paymentType === "udhaar" && (
+              {(draftSale.paymentType === "udhaar" || draftSale.paymentType === "partial") && (
                 <div className="mt-3">
                   <div className="flex items-center justify-between">
                     <p className="text-[11px] font-bold uppercase text-slate-500">
@@ -364,8 +397,8 @@ export function SaleNewScreen() {
 
               <button
                 onClick={() => {
-                  if (draftSale.paymentType === "udhaar" && !draftSale.customerId) {
-                    setErr("Udhaar needs a customer");
+                  if ((draftSale.paymentType === "udhaar" || draftSale.paymentType === "partial") && !draftSale.customerId) {
+                    setErr("Credit and partial sales need a customer");
                     return;
                   }
                   setErr("");
@@ -373,7 +406,7 @@ export function SaleNewScreen() {
                   setShowPay(true);
                 }}
                 disabled={
-                  draftSale.paymentType === "udhaar" && !draftSale.customerId
+                  (draftSale.paymentType === "udhaar" || draftSale.paymentType === "partial") && !draftSale.customerId
                 }
                 className="w-full mt-4 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-3.5 rounded-xl text-base transition active:scale-95"
               >
@@ -432,7 +465,7 @@ export function SaleNewScreen() {
             {draftSale.paymentType === "cash" ? "Cash sale" : "Udhaar — added to khata"}
           </p>
         </div>
-        {draftSale.paymentType === "cash" && (
+        {(draftSale.paymentType === "cash" || draftSale.paymentType === "partial") && (
           <div className="space-y-2">
             <Input
               type="number"
@@ -442,12 +475,15 @@ export function SaleNewScreen() {
               placeholder="Amount received (Rs.)"
               className="h-12 text-xl font-bold"
             />
+            {draftSale.paymentType === "partial" && paid && parseFloat(paid) < total && (
+              <p className="text-amber-700 font-bold text-center">Remaining: {fmtRs(total - parseFloat(paid))}</p>
+            )}
             {paid && parseFloat(paid) >= total && (
               <p className="text-emerald-600 font-bold text-center text-lg">
                 Change: {fmtRs(parseFloat(paid) - total)}
               </p>
             )}
-            {paid && parseFloat(paid) < total && (
+            {paid && parseFloat(paid) < total && draftSale.paymentType === "cash" && (
               <p className="text-rose-600 font-bold text-center">
                 Short by {fmtRs(total - parseFloat(paid))}
               </p>
@@ -695,7 +731,7 @@ export function SaleNewScreen() {
 
       {/* Done toast / receipt */}
       <Sheet open={!!doneBill} onClose={closeDone} title="✅ Bill Saved">
-        {doneBill && <DoneBillView billId={doneBill.id} total={doneBill.total} onHistory={() => { setDoneBill(null); navigate("bill-history", { filterType: "sales" }); }} onNew={() => setDoneBill(null)} />}
+        {doneBill && <DoneBillView billId={doneBill.id} total={doneBill.total} paid={doneBill.paid} outstanding={doneBill.outstanding} roundingAdjustment={doneBill.roundingAdjustment} onHistory={() => { setDoneBill(null); navigate("bill-history", { filterType: "sales" }); }} onNew={() => setDoneBill(null)} />}
       </Sheet>
     </div>
   );
@@ -705,11 +741,17 @@ export function SaleNewScreen() {
 function DoneBillView({
   billId,
   total,
+  paid,
+  outstanding,
+  roundingAdjustment,
   onHistory,
   onNew,
 }: {
   billId: number;
   total: number;
+  paid: number;
+  outstanding: number;
+  roundingAdjustment: number;
   onHistory: () => void;
   onNew: () => void;
 }) {
@@ -720,6 +762,11 @@ function DoneBillView({
       <div className="text-5xl mb-2">✅</div>
       <p className="font-extrabold text-lg">Bill #{billId} saved</p>
       <p className="text-3xl font-extrabold text-slate-900 mt-2">{fmtRs(total)}</p>
+      <div className="grid grid-cols-3 gap-1 mt-3 text-xs">
+        <div className="rounded-lg bg-emerald-50 p-2"><span className="block text-slate-500">Paid</span><strong>{fmtRs(paid)}</strong></div>
+        <div className="rounded-lg bg-amber-50 p-2"><span className="block text-slate-500">Due</span><strong>{fmtRs(outstanding)}</strong></div>
+        <div className="rounded-lg bg-slate-100 p-2"><span className="block text-slate-500">Rounding</span><strong>{fmtRs(roundingAdjustment)}</strong></div>
+      </div>
       {syncStatus === "synced" ? (
         <p className="text-xs text-emerald-600 mt-2 bg-emerald-50 inline-block px-3 py-1 rounded-full font-bold">
           ✓ Synced to cloud

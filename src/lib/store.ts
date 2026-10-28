@@ -133,6 +133,7 @@ interface AppState {
   draftSale: {
     customerId: number | null;
     paymentType: PaymentType;
+    amountPaid?: number;
     lines: {
       tempId: string;
       itemId: number;
@@ -159,6 +160,7 @@ interface AppState {
   draftSaleRemoveLine: (tempId: string) => void;
   draftSaleSetCustomer: (id: number | null) => void;
   draftSaleSetPayment: (t: PaymentType) => void;
+  draftSaleSetAmountPaid: (amount: number | undefined) => void;
   draftSaleTotal: () => number;
   commitSale: () => SaleBill;
 
@@ -663,11 +665,17 @@ export const useApp = create<AppState>()(
     })),
   draftSaleSetCustomer: (id) => set((s) => ({ draftSale: { ...s.draftSale, customerId: id } })),
   draftSaleSetPayment: (t) => set((s) => ({ draftSale: { ...s.draftSale, paymentType: t } })),
+  draftSaleSetAmountPaid: (amount) => set((s) => ({ draftSale: { ...s.draftSale, amountPaid: amount } })),
   draftSaleTotal: () => get().draftSale.lines.reduce((sum, l) => sum + l.lineTotal, 0),
 
   commitSale: () => {
     const s = get();
     const total = round2(s.draftSale.lines.reduce((sum, l) => sum + l.lineTotal, 0));
+    const paid = round2(s.draftSale.amountPaid ?? (s.draftSale.paymentType === "cash" ? total : 0));
+    if ((s.draftSale.paymentType === "udhaar" || s.draftSale.paymentType === "partial") && !s.draftSale.customerId) {
+      throw new Error("Credit and partial sales require a customer");
+    }
+    if (paid > total) throw new Error("Payment cannot exceed the bill total");
     const billId = uid();
     const billUuid = generateUuid(); // client-generated, for idempotency
 
@@ -679,6 +687,9 @@ export const useApp = create<AppState>()(
       customerId: s.draftSale.customerId,
       billDate: now(),
       paymentType: s.draftSale.paymentType,
+      amountPaid: paid,
+      outstandingAmount: round2(total - paid),
+      paymentStatus: paid === total ? "paid" : paid > 0 ? "partial" : "unpaid",
       totalAmount: total,
       syncStatus: "pending",
       createdAt: now(),
@@ -1253,30 +1264,19 @@ export const useApp = create<AppState>()(
     return { ok: true, supplier, warning };
   },
   recordCustomerPayment: (customerId, amount, note) => {
-    
-    set((st) => {
-      const newTxns = [
-        ...st.khataTransactions,
-        {
-          id: uid(),
-          partyType: "customer" as PartyType,
-          partyId: customerId,
-          transactionType: "payment_received" as KhataTxnType,
-          amount,
-          note,
-          transactionDate: now(),
-          createdAt: now(),
-        },
-      ];
-      return {
-        khataTransactions: newTxns,
-        customers: st.customers.map((c) =>
-          c.id === customerId
-            ? { ...c, khataBalance: computeBalance(newTxns, "customer", customerId), updatedAt: now() }
-            : c
-        ),
-      };
-    });
+    void recordLocalPayment({
+      uuid: generateUuid(),
+      partyType: "customer",
+      partyId: customerId,
+      amount,
+      method: "cash",
+      note,
+    })
+      .then(async () => {
+        const local = await loadLocalSnapshot();
+        if (local) set(local);
+      })
+      .catch((error) => console.error("Local customer payment failed", error));
   },
   recordSupplierPayment: (supplierId, amount, note) => {
     
