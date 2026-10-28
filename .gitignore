@@ -33,8 +33,11 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 .env
+!.env.example
 db/*.db
 db/*.db-journal
+prisma/db/*.db
+prisma/db/*.db-journal
 public/uploads/
 .zscripts/dev.pid
 backups/
