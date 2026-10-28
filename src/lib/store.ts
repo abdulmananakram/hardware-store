@@ -300,9 +300,19 @@ export const useApp = create<AppState>()(
     (set, get) => ({
       isAuthed: false,
       login: (pin) => {
-        if (pin === "1234") {
-          set({ isAuthed: true, screen: "dashboard" });
-          return true;
+        if (typeof XMLHttpRequest === "undefined") return false;
+        try {
+          const request = new XMLHttpRequest();
+          request.open("POST", "/api/login", false);
+          request.setRequestHeader("Content-Type", "application/json");
+          request.withCredentials = true;
+          request.send(JSON.stringify({ pin }));
+          if (request.status >= 200 && request.status < 300) {
+            set({ isAuthed: true, screen: "dashboard" });
+            return true;
+          }
+        } catch {
+          return false;
         }
         return false;
       },
