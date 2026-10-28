@@ -41,12 +41,13 @@ export const createCustomerReturn = async (input: {
       await tx.inventoryMovement.create({
         data: {
           itemId: line.itemId,
-          type: "customer_return",
+          type: "CUSTOMER_RETURN_IN",
           deltaInBaseUnit: input.qtyReturnedInBaseUnit,
           newQtyInBaseUnit: item.qtyInBaseUnit,
           referenceType: "return",
           referenceId: entry.id,
           reason: input.reason,
+          costSnapshot: line.costSnapshot,
         },
       });
     }
@@ -76,4 +77,3 @@ export const createCustomerReturn = async (input: {
     });
     return entry;
   });
-

@@ -200,13 +200,14 @@ export const createSale = async (input: CreateSaleInput) =>
       await tx.inventoryMovement.create({
         data: {
           itemId: line.itemId,
-          type: "sale",
+          type: "SALE_OUT",
           deltaInBaseUnit: -line.qtyInBaseUnit,
           newQtyInBaseUnit: itemAfter.qtyInBaseUnit,
           referenceType: "sale_bill",
           referenceId: bill.id,
           referenceUuid: bill.uuid,
           reason: "Sale",
+          costSnapshot: line.costSnapshot,
         },
       });
       if (itemAfter.qtyInBaseUnit <= itemAfter.lowStockThreshold) {

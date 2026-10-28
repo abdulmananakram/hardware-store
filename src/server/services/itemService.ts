@@ -81,12 +81,13 @@ export const createItem = async (input: {
       await tx.inventoryMovement.create({
         data: {
           itemId: item.id,
-          type: "adjustment_pos",
+          type: "OPENING",
           deltaInBaseUnit: opening,
           newQtyInBaseUnit: opening,
           referenceType: "adjustment",
           referenceId: adjustment.id,
           reason: "Opening stock at item creation",
+          costSnapshot: item.costPerBaseUnit,
         },
       });
     }

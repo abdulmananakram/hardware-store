@@ -18,13 +18,14 @@ export const cancelSale = async (id: number, reason: string) =>
       await tx.inventoryMovement.create({
         data: {
           itemId: line.itemId,
-          type: "cancellation",
+          type: "REVERSAL",
           deltaInBaseUnit: line.qtyInBaseUnit,
           newQtyInBaseUnit: item.qtyInBaseUnit,
           referenceType: "sale_bill",
           referenceId: bill.id,
           referenceUuid: bill.uuid,
           reason,
+          costSnapshot: line.costSnapshot,
         },
       });
     }
@@ -58,4 +59,3 @@ export const cancelSale = async (id: number, reason: string) =>
     });
     return updated;
   });
-

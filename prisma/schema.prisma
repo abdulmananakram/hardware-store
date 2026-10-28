@@ -122,6 +122,8 @@ model StockAdjustment {
   deltaInBaseUnit  Float
   newQtyInBaseUnit Float
   reason           String
+  systemQtyInBaseUnit Float?
+  countedQtyInBaseUnit Float?
   adjustedAt       DateTime @default(now())
   item             Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
 }
@@ -137,6 +139,7 @@ model InventoryMovement {
   referenceId      Int?
   referenceUuid    String?
   reason           String
+  costSnapshot    Float?
   createdAt        DateTime @default(now())
   item             Item     @relation(fields: [itemId], references: [id])
 }

@@ -125,6 +125,8 @@ export interface StockAdjustment {
   deltaInBaseUnit: number; // positive = add, negative = remove
   newQtyInBaseUnit: number; // snapshot after adjustment
   reason: string;
+  systemQtyInBaseUnit?: number;
+  countedQtyInBaseUnit?: number;
   adjustedAt: string; // created_at
 }
 
@@ -248,6 +250,7 @@ export interface KhataTransaction {
   relatedPurchaseBillId?: number;
   relatedReturnId?: number;
   note?: string;
+  costSnapshot?: number;
   transactionDate: string;
   createdAt: string;
   running?: number;

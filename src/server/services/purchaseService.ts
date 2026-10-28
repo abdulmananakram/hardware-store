@@ -120,13 +120,14 @@ export const createPurchase = async (input: CreatePurchaseInput) =>
       await tx.inventoryMovement.create({
         data: {
           itemId: line.itemId,
-          type: "purchase",
+          type: "PURCHASE_IN",
           deltaInBaseUnit: line.qtyInBaseUnit,
           newQtyInBaseUnit: nextQty,
           referenceType: "purchase_bill",
           referenceId: bill.id,
           referenceUuid: bill.uuid,
           reason: "Purchase received",
+          costSnapshot: line.costPerBaseUnit,
         },
       });
     }
