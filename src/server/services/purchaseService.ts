@@ -6,9 +6,13 @@ import { normalizePayment, ServiceError, assertPositive } from "./shared";
 export type CreatePurchaseInput = {
   uuid: string;
   supplierId: number;
-  paymentType: "cash" | "udhaar";
+  paymentType: "cash" | "udhaar" | "partial";
   amountPaid?: number;
   paymentMethod?: string;
+  invoiceReference?: string;
+  dueDate?: string;
+  discountAmount?: number;
+  freightAmount?: number;
   lines: {
     itemId: number;
     unitId: number;
@@ -80,7 +84,8 @@ export const createPurchase = async (input: CreatePurchaseInput) =>
       });
     }
 
-    const total = round2(prepared.reduce((sum, line) => sum + line.lineTotal, 0));
+    const subtotal = round2(prepared.reduce((sum, line) => sum + line.lineTotal, 0));
+    const total = round2(subtotal - (input.discountAmount ?? 0) + (input.freightAmount ?? 0));
     const payment = normalizePayment(total, input.paymentType, input.amountPaid);
     const bill = await tx.purchaseBill.create({
       data: {
@@ -88,6 +93,11 @@ export const createPurchase = async (input: CreatePurchaseInput) =>
         supplierId: input.supplierId,
         paymentType: input.paymentType,
         totalAmount: total,
+        subtotalAmount: subtotal,
+        discountAmount: input.discountAmount ?? 0,
+        freightAmount: input.freightAmount ?? 0,
+        invoiceReference: input.invoiceReference,
+        dueDate: input.dueDate ? new Date(input.dueDate) : undefined,
         ...payment,
         paymentMethod: input.paymentMethod,
       },

@@ -8,7 +8,11 @@ import { createPurchase } from "@/server/services/purchaseService";
 const schema = z.object({
   uuid: z.string().uuid(),
   supplierId: z.number().int().positive(),
-  paymentType: z.enum(["cash", "udhaar"]),
+  paymentType: z.enum(["cash", "udhaar", "partial"]),
+  invoiceReference: z.string().max(120).optional(),
+  dueDate: z.string().datetime().optional(),
+  discountAmount: z.number().nonnegative().optional(),
+  freightAmount: z.number().nonnegative().optional(),
   amountPaid: z.number().nonnegative().optional(),
   paymentMethod: z.string().optional(),
   lines: z.array(z.object({
@@ -36,4 +40,3 @@ export async function POST(request: NextRequest) {
     return errorResponse(error);
   }
 }
-

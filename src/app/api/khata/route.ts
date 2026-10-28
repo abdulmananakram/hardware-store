@@ -4,6 +4,7 @@ import { requireAuth } from "@/server/auth";
 import { errorResponse } from "@/server/api";
 import { db } from "@/lib/db";
 import { recordTransaction } from "@/server/services/khataService";
+import { receivePayment } from "@/server/services/paymentService";
 
 const schema = z.object({
   partyType: z.enum(["customer", "supplier"]),
@@ -11,6 +12,14 @@ const schema = z.object({
   transactionType: z.enum(["credit_given", "payment_received", "payable_incurred", "payment_made"]),
   amount: z.number().positive(),
   note: z.string().optional(),
+});
+const paymentSchema = z.object({
+  partyType: z.enum(["customer", "supplier"]),
+  partyId: z.number().int().positive(),
+  amount: z.number().positive(),
+  method: z.string().optional(),
+  note: z.string().optional(),
+  allocations: z.array(z.object({ billId: z.number().int().positive(), amount: z.number().positive() })).optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -22,7 +31,13 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const authError = requireAuth(request);
   if (authError) return authError;
-  const parsed = schema.safeParse(await request.json().catch(() => null));
+  const body = await request.json().catch(() => null);
+  const payment = paymentSchema.safeParse(body);
+  if (payment.success) {
+    try { return NextResponse.json(await receivePayment(payment.data), { status: 201 }); }
+    catch (error) { return errorResponse(error); }
+  }
+  const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: true, message: parsed.error.message }, { status: 400 });
   try {
     const result = await db.$transaction(async (tx) => {
@@ -38,4 +53,3 @@ export async function POST(request: NextRequest) {
     return errorResponse(error);
   }
 }
-

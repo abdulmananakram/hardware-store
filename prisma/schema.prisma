@@ -166,6 +166,7 @@ model Customer {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   sales        SaleBill[]
+  payments     Payment[]
 }
 
 model Supplier {
@@ -177,6 +178,7 @@ model Supplier {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   purchases      PurchaseBill[]
+  payments       Payment[]
 }
 
 model SaleBill {
@@ -200,6 +202,7 @@ model SaleBill {
   updatedAt         DateTime       @updatedAt
   customer          Customer?      @relation(fields: [customerId], references: [id])
   lines             SaleBillLine[]
+  allocations       PaymentAllocation[]
 }
 
 model SaleBillLine {
@@ -245,8 +248,13 @@ model PurchaseBill {
   cancelReason      String?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
+  invoiceReference  String?
+  dueDate           DateTime?
+  discountAmount    Float          @default(0)
+  freightAmount     Float          @default(0)
   supplier          Supplier           @relation(fields: [supplierId], references: [id])
   lines             PurchaseBillLine[]
+  allocations       PaymentAllocation[]
 }
 
 model PurchaseBillLine {
@@ -303,4 +311,32 @@ model AppNotification {
   relatedSupplierId Int?
   isRead            Boolean  @default(false)
   createdAt         DateTime @default(now())
+}
+
+model Payment {
+  id                 Int       @id @default(autoincrement())
+  shopId             Int       @default(1)
+  partyType          String
+  customerId         Int?
+  supplierId         Int?
+  amount             Float
+  method             String    @default("cash")
+  note               String?
+  paymentDate        DateTime  @default(now())
+  customer           Customer? @relation(fields: [customerId], references: [id])
+  supplier           Supplier? @relation(fields: [supplierId], references: [id])
+  allocations        PaymentAllocation[]
+  createdAt          DateTime  @default(now())
+}
+
+model PaymentAllocation {
+  id                Int          @id @default(autoincrement())
+  paymentId         Int
+  saleBillId        Int?
+  purchaseBillId    Int?
+  amount            Float
+  createdAt         DateTime     @default(now())
+  payment           Payment      @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  saleBill          SaleBill?    @relation(fields: [saleBillId], references: [id])
+  purchaseBill      PurchaseBill? @relation(fields: [purchaseBillId], references: [id])
 }
