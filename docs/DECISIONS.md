@@ -27,9 +27,9 @@ fixed-point storage will be finalized with the M2/M4 sale and payment models.
   created.
 - Purchase freight is included in landed cost and discounts reduce landed
   cost. The API stores both the subtotal and adjustment components.
-- Reports are generated from the server ledger and can be printed/shared as
-  styled browser output. This avoids claiming Urdu PDF shaping support from a
-  library that is not bundled.
+- Reports are generated from the local Dexie ledger and can be
+  printed/shared as styled browser output. This avoids claiming Urdu PDF
+  shaping support from a library that is not bundled.
 - The server is an optional sync target. `SYNC_TOKEN` protects sync when
   configured; the local PWA remains the primary working store.
 
@@ -63,3 +63,23 @@ the current web/PWA scope.
  boundary used by a future settings UI.
 - A seven-day local reminder default is stored as `backupReminderDays`; the
  last successful export is recorded as `lastBackupAt`.
+
+## Task 8 payment UX — 2026-10-29
+
+- Billing supports cash, full credit, and partial payment. Credit and partial
+ payment require a customer; payment above the bill total is rejected.
+- Customer payments use the transactional local payment service and allocate
+ oldest outstanding bills first. The store refreshes its read cache after the
+ transaction succeeds.
+- Receipt data exposes the charged total, paid amount, outstanding amount, and
+ stored rounding adjustment. Native browser print/share remains the offline
+ delivery mechanism.
+
+## Verification boundary — 2026-10-29
+
+- Jest, lint, TypeScript, and production build are automated and currently
+ green. Real Android Chrome installation, airplane mode, browser file
+ pickers, and native share/print have not been executed in this environment.
+- A complete integer-paisa migration and complete local cancellation service
+ remain follow-up work; existing decimal-compatible business helpers are
+ intentionally preserved to avoid changing established behavior.
