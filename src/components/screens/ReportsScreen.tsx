@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { fmtRs } from "@/lib/store";
+import { getLocalReport, type LocalReportKind } from "@/lib/localReports";
 
 type Report = { kind: string; [key: string]: unknown };
 
@@ -10,18 +11,16 @@ export function ReportsScreen() {
   const [kind, setKind] = useState("sales");
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
 
   useEffect(() => {
     let active = true;
-    void fetch(`/api/reports?kind=${kind}`, { credentials: "include" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error((await response.json()).message ?? "Report unavailable");
-        return response.json() as Promise<Report>;
-      })
+    void getLocalReport(kind as LocalReportKind, from, to)
       .then((data) => { if (active) setReport(data); })
       .catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "Report unavailable"); });
     return () => { active = false; };
-  }, [kind]);
+  }, [kind, from, to]);
 
   const print = () => window.print();
   const share = async () => {
@@ -38,6 +37,10 @@ export function ReportsScreen() {
           </button>
         ))}
       </div>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-xs font-bold text-slate-500">From<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm" /></label>
+        <label className="text-xs font-bold text-slate-500">To<input type="date" value={to} onChange={(event) => setTo(event.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm" /></label>
+      </div>
       <div className="flex justify-end gap-2">
         <Button onClick={share} variant="outline">Share / PDF</Button>
         <Button onClick={print}>Print</Button>
@@ -52,6 +55,7 @@ export function ReportsScreen() {
           {Array.isArray(report.bills) && <p>{report.bills.length} bills in range</p>}
           {Array.isArray(report.items) && <p>{report.items.length} active items; valuation {fmtRs(report.valuation as number)}</p>}
           {Array.isArray(report.transactions) && <p>{report.transactions.length} ledger entries</p>}
+          {typeof report.note === "string" && <p className="border-t pt-3 text-xs text-slate-500">{report.note}</p>}
         </div>
       )}
     </section>
