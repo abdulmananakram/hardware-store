@@ -224,6 +224,7 @@ export interface KhataTransaction {
   note?: string;
   transactionDate: string;
   createdAt: string;
+  running?: number;
 }
 
 // Top-level table

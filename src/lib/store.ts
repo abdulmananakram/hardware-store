@@ -180,6 +180,7 @@ interface AppState {
   // Inventory CRUD
   addItem: (data: {
     name: string;
+    urduName?: string;
     categoryId: number;
     baseUnitName: string;
     pricePerBaseUnit: number;
@@ -907,6 +908,7 @@ export const useApp = create<AppState>()(
       shopId: 1,
       categoryId: data.categoryId,
       name: data.name,
+      urduName: data.urduName,
       icon: data.icon,
       photoUrl: data.photoUrl, // optional product image
       baseUnitName: data.baseUnitName,
@@ -1444,13 +1446,17 @@ export const useApp = create<AppState>()(
   pushBill: (billUuid) => {
     set((st) => {
       // Mark as syncing first (UI feedback)
-      const markSyncing = (b: SaleBill | PurchaseBill): SaleBill | PurchaseBill =>
+      const markSaleSyncing = (b: SaleBill): SaleBill =>
+        b.uuid === billUuid && (b.syncStatus === "pending" || b.syncStatus === "failed")
+          ? { ...b, syncStatus: "syncing" as SyncStatus }
+          : b;
+      const markPurchaseSyncing = (b: PurchaseBill): PurchaseBill =>
         b.uuid === billUuid && (b.syncStatus === "pending" || b.syncStatus === "failed")
           ? { ...b, syncStatus: "syncing" as SyncStatus }
           : b;
       return {
-        saleBills: st.saleBills.map(markSyncing),
-        purchaseBills: st.purchaseBills.map(markSyncing),
+        saleBills: st.saleBills.map(markSaleSyncing),
+        purchaseBills: st.purchaseBills.map(markPurchaseSyncing),
       };
     });
 
@@ -1458,13 +1464,17 @@ export const useApp = create<AppState>()(
     // Server checks UUID for idempotency. If UUID exists, returns existing record (no duplicate).
     setTimeout(() => {
       set((st) => {
-        const markSynced = (b: SaleBill | PurchaseBill): SaleBill | PurchaseBill =>
+        const markSaleSynced = (b: SaleBill): SaleBill =>
+          b.uuid === billUuid && b.syncStatus === "syncing"
+            ? { ...b, syncStatus: "synced" as SyncStatus, updatedAt: now() }
+            : b;
+        const markPurchaseSynced = (b: PurchaseBill): PurchaseBill =>
           b.uuid === billUuid && b.syncStatus === "syncing"
             ? { ...b, syncStatus: "synced" as SyncStatus, updatedAt: now() }
             : b;
         return {
-          saleBills: st.saleBills.map(markSynced),
-          purchaseBills: st.purchaseBills.map(markSynced),
+          saleBills: st.saleBills.map(markSaleSynced),
+          purchaseBills: st.purchaseBills.map(markPurchaseSynced),
         };
       });
     }, 800); // simulate network latency
@@ -1653,8 +1663,8 @@ export const useApp = create<AppState>()(
 // ============================================================
 
 // Per resolution #5 — money rounding rule (2 decimals)
-export const fmtRs = (n: number) => {
-  const rounded = round2(n);
+export const fmtRs = (n: number | undefined) => {
+  const rounded = round2(n ?? 0);
   if (Number.isInteger(rounded)) {
     return "Rs. " + rounded.toLocaleString("en-PK");
   }
