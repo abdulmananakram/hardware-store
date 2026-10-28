@@ -3,11 +3,11 @@
 **Branch:** `v1-foundation`  
 **Updated:** 2026-10-29
 
-The supplied handoff attachment is not present as a repository file. The
-owner decisions in the latest task description and
-`hardware_shop_pos_business_rules.md` were used as the controlling
-requirements. Statuses below describe the code that is actually present and
-tested; they do not imply real-device verification.
+The supplied handoff is now stored at
+[`HANDOFF_SPEC_v1.md`](./HANDOFF_SPEC_v1.md). Its owner decisions and
+`hardware_shop_pos_business_rules.md` are the controlling requirements.
+Statuses below describe the code that is actually present and tested; they do
+not imply real-device verification.
 
 | Requirement area | Status | Evidence / remaining gap |
 |---|---|---|

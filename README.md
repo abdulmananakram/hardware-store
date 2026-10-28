@@ -58,6 +58,18 @@ Backups are written to `backups/` and the newest 30 are retained. To restore, st
 
 `npm run db:seed` is optional and only creates the default shop configuration. It is never run automatically and does not add demo business data.
 
+For development and automated report/e2e fixtures, load the complete
+illustrative sample dataset with:
+
+```powershell
+npm run seed:demo
+```
+
+This command uses the same Dexie client services as the app and verifies the
+documented stock, weighted-cost, sales, return, cancellation, payable,
+receivable, and notification totals. Demo records are marked `isDemo`; do
+not run it against a shop database you need to preserve.
+
 The browser backup/restore controls export the complete Dexie database,
 including client UUIDs and pending-sync status. Export before replacing a
 device or restoring a server snapshot. Restore requires an explicit
@@ -84,6 +96,7 @@ when connectivity returns; a server outage must not prevent local work.
 npm run lint
 npx tsc --noEmit
 npm test -- --runInBand
+npm run seed:demo
 ```
 
 The current automated suite covers the pure business rules, Dexie services,

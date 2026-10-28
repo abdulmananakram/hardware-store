@@ -52,6 +52,7 @@ export interface Category {
   imageUrl?: string; // alias kept for compat
   createdAt: string;
   updatedAt: string;
+  isDemo?: boolean;
 }
 
 // Child table — only created_at
@@ -90,6 +91,7 @@ export interface Item {
   createdAt: string;
   updatedAt: string;
   units: ItemUnit[];
+  isDemo?: boolean;
 }
 
 export interface CatalogueAttribute {
@@ -131,6 +133,7 @@ export interface StockAdjustment {
   systemQtyInBaseUnit?: number;
   countedQtyInBaseUnit?: number;
   adjustedAt: string; // created_at
+  isDemo?: boolean;
 }
 
 // Top-level table
@@ -142,6 +145,8 @@ export interface Customer {
   khataBalance: number; // cached running balance; positive = owes shop
   createdAt: string;
   updatedAt: string;
+  notes?: string;
+  isDemo?: boolean;
 }
 
 // Top-level table
@@ -153,6 +158,8 @@ export interface Supplier {
   payableBalance: number; // cached running balance; positive = shop owes
   createdAt: string;
   updatedAt: string;
+  notes?: string;
+  isDemo?: boolean;
 }
 
 // Child table (line)
@@ -198,6 +205,7 @@ export interface SaleBill {
   createdAt: string;
   updatedAt: string;
   lines: SaleBillLine[];
+  isDemo?: boolean;
 }
 
 // Child table (line)
@@ -236,6 +244,7 @@ export interface PurchaseBill {
   createdAt: string;
   updatedAt: string;
   lines: PurchaseBillLine[];
+  isDemo?: boolean;
 }
 
 // Top-level table
@@ -251,6 +260,7 @@ export interface Return {
   returnDate: string;
   createdAt: string;
   updatedAt: string;
+  isDemo?: boolean;
 }
 
 // Top-level table — Khata ledger
@@ -270,6 +280,7 @@ export interface KhataTransaction {
   transactionDate: string;
   createdAt: string;
   running?: number;
+  isDemo?: boolean;
 }
 
 // Top-level table
@@ -297,6 +308,7 @@ export interface LocalPayment {
   syncStatus: SyncStatus;
   paymentDate: string;
   createdAt: string;
+  isDemo?: boolean;
 }
 
 // Child / Ledger table — Permanent Inventory Movements Ledger (Per Section 4 & 9)
@@ -332,6 +344,7 @@ export interface InventoryMovement {
   costSnapshot?: number;
   note?: string;
   createdAt: string;
+  isDemo?: boolean;
 }
 
 // Audit trail for sensitive events (Section 12)
@@ -341,6 +354,7 @@ export interface AuditLog {
   details: string;
   userId?: string;
   createdAt: string;
+  isDemo?: boolean;
 }
 
 // Top-level table — temporary AI session

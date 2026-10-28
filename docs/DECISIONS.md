@@ -52,9 +52,8 @@ the current web/PWA scope.
 - Server hydration remains compatibility-only; local mutations do not wait for
  server availability. Background sync uses asynchronous `fetch`, never
  synchronous XHR.
-- The supplied handoff attachment was not available as a readable workspace
- file during this run; the requirements in the task message were treated as
- the owner decisions.
+- The supplied handoff is stored as `docs/HANDOFF_SPEC_v1.md`; its owner
+ decisions are treated as authoritative.
 
 ## Task 6 backup policy — 2026-10-29
 
@@ -83,3 +82,13 @@ the current web/PWA scope.
 - A complete integer-paisa migration and complete local cancellation service
  remain follow-up work; existing decimal-compatible business helpers are
  intentionally preserved to avoid changing established behavior.
+
+## Demo data — 2026-10-29
+
+- `npm run seed:demo` uses `src/lib/demoSeed.ts` and the same Dexie client
+ services used by the app for catalogue, opening stock, purchases, sales,
+ payments, returns, cancellation, and stock counts.
+- Demo records carry `isDemo`; demo seeding is development-only and is not
+ exposed in the production UI. Illustrative prices are not market-rate data.
+- `tsx` is a development-only script runner required because the repository
+ executes TypeScript service modules directly from the seed command.
