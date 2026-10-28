@@ -217,20 +217,33 @@ export async function loadLocalSnapshot(): Promise<LocalSnapshot | null> {
 export async function exportLocalDatabase(): Promise<Blob> {
   const snapshot = await loadLocalSnapshot();
   const pin = await localDb.settings.get("pin");
-  return new Blob([JSON.stringify({ version: 1, snapshot, pin }, null, 2)], {
+  const exportedAt = new Date().toISOString();
+  await localDb.settings.put({ key: "lastBackupAt", value: exportedAt });
+  return new Blob([JSON.stringify({ version: 2, exportedAt, snapshot, pin }, null, 2)], {
     type: "application/json",
   });
 }
 
-export async function importLocalDatabase(file: Blob): Promise<void> {
+export async function getBackupStatus(now = new Date()): Promise<{ lastBackupAt?: string; reminderDays: number; due: boolean }> {
+  const last = await localDb.settings.get("lastBackupAt");
+  const days = await localDb.settings.get("backupReminderDays");
+  const reminderDays = typeof days?.value === "number" ? days.value : 7;
+  const lastBackupAt = typeof last?.value === "string" ? last.value : undefined;
+  return { lastBackupAt, reminderDays, due: !lastBackupAt || now.getTime() - new Date(lastBackupAt).getTime() >= reminderDays * 86400000 };
+}
+
+export async function importLocalDatabase(file: Blob, confirmed = false): Promise<void> {
+  if (!confirmed) throw new Error("Restore requires explicit confirmation");
   const parsed = JSON.parse(await file.text()) as {
     version?: number;
+    exportedAt?: string;
     snapshot?: LocalSnapshot | null;
     pin?: LocalSetting;
   };
-  if (parsed.version !== 1 || !parsed.snapshot) {
+  if (![1, 2].includes(parsed.version ?? 0) || !parsed.snapshot) {
     throw new Error("Unsupported or incomplete backup file");
   }
   await saveLocalSnapshot(parsed.snapshot);
   if (parsed.pin) await localDb.settings.put(parsed.pin);
+  await localDb.settings.put({ key: "lastBackupAt", value: parsed.exportedAt ?? new Date().toISOString() });
 }

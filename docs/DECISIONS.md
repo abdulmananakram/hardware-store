@@ -55,3 +55,11 @@ the current web/PWA scope.
 - The supplied handoff attachment was not available as a readable workspace
  file during this run; the requirements in the task message were treated as
  the owner decisions.
+
+## Task 6 backup policy — 2026-10-29
+
+- Dexie exports use file version 2 and preserve client UUIDs and sync status.
+- Restore requires an explicit `confirmed` argument; this is the confirmation
+ boundary used by a future settings UI.
+- A seven-day local reminder default is stored as `backupReminderDays`; the
+ last successful export is recorded as `lastBackupAt`.
