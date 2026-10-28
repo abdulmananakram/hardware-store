@@ -7,19 +7,36 @@ import { Button } from "@/components/ui/button";
 
 export function LoginScreen() {
   const login = useApp((s) => s.login);
+  const pinConfigured = useApp((s) => s.pinConfigured);
+  const initializeLocalAuth = useApp((s) => s.initializeLocalAuth);
+  const setOwnerPin = useApp((s) => s.setOwnerPin);
   const navigate = useApp((s) => s.navigate);
   const [pin, setPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [setupMode, setSetupMode] = useState(false);
   const [err, setErr] = useState("");
 
-  const handle = () => {
+  const handle = async () => {
     if (pin.length < 4) {
       setErr("PIN must be at least 4 digits");
       return;
     }
-    if (login(pin)) {
+    if (setupMode || !pinConfigured) {
+      if (pin !== confirmPin) {
+        setErr("PINs do not match");
+        return;
+      }
+      await setOwnerPin(pin);
+      setSetupMode(false);
+      setPin("");
+      setConfirmPin("");
+      setErr("PIN saved. Enter it to unlock.");
+      return;
+    }
+    if (await login(pin)) {
       navigate("dashboard");
     } else {
-      setErr("Wrong PIN. Try 1234");
+      setErr("Wrong PIN");
     }
   };
 
@@ -42,6 +59,19 @@ export function LoginScreen() {
           placeholder="• • • •"
           className="bg-white/15 border-white/30 text-white text-center text-2xl tracking-[0.5em] placeholder:text-white/40 h-14"
         />
+        {(setupMode || !pinConfigured) && (
+          <Input
+            type="password"
+            inputMode="numeric"
+            value={confirmPin}
+            onChange={(e) => {
+              setConfirmPin(e.target.value);
+              setErr("");
+            }}
+            placeholder="Confirm PIN"
+            className="bg-white/15 border-white/30 text-white text-center text-xl tracking-[0.3em] placeholder:text-white/40 h-12"
+          />
+        )}
         {err && <p className="text-amber-300 text-sm text-center">{err}</p>}
         <Button
           onClick={handle}
@@ -50,8 +80,22 @@ export function LoginScreen() {
           Unlock
         </Button>
         <p className="text-center text-teal-200/70 text-xs mt-2">
-          Demo PIN: <span className="font-bold">1234</span>
+          {(!pinConfigured || setupMode) ? "Set your owner PIN on this device" : "Owner PIN"}
         </p>
+        {pinConfigured && (
+          <button
+            type="button"
+            onClick={() => {
+              setSetupMode((value) => !value);
+              setPin("");
+              setConfirmPin("");
+              setErr("");
+            }}
+            className="w-full text-xs text-teal-200 underline"
+          >
+            {setupMode ? "Cancel PIN change" : "Change PIN"}
+          </button>
+        )}
       </div>
     </div>
   );

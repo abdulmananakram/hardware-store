@@ -1,7 +1,6 @@
 "use client";
 
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 import {
   Category,
   Item,
@@ -30,6 +29,8 @@ import {
   InventoryMovement,
   AuditLog,
 } from "./types";
+import { loadLocalSnapshot, saveLocalSnapshot } from "./localDb";
+import { hasLocalPin, setLocalPin, verifyLocalPin } from "./localAuth";
 import {
   round2,
   computeBalance,
@@ -47,7 +48,10 @@ import {
 interface AppState {
   // Auth
   isAuthed: boolean;
-  login: (pin: string) => boolean;
+  login: (pin: string) => Promise<boolean>;
+  pinConfigured: boolean;
+  initializeLocalAuth: () => Promise<void>;
+  setOwnerPin: (pin: string) => Promise<void>;
   hydrateFromServer: () => Promise<boolean>;
 
   // Navigation
@@ -311,35 +315,64 @@ const initialDraftPurchase = {
 };
 
 export const useApp = create<AppState>()(
-  persist(
     (set, get) => ({
       isAuthed: false,
-      login: (pin) => {
-        if (typeof XMLHttpRequest === "undefined") return false;
+      pinConfigured: false,
+      initializeLocalAuth: async () => {
+        if (typeof window === "undefined") return;
+        set({ pinConfigured: await hasLocalPin() });
+      },
+      setOwnerPin: async (pin) => {
+        await setLocalPin(pin);
+        set({ pinConfigured: true });
+      },
+      login: async (pin) => {
+        if (typeof window === "undefined") return false;
         try {
-          const response = syncRequest("POST", "/api/login", { pin });
-          if (response.status >= 200 && response.status < 300) {
+          if (await verifyLocalPin(pin)) {
             set({ isAuthed: true, screen: "dashboard" });
             void get().hydrateFromServer();
             return true;
           }
-        } catch {
+          return false;
+        } catch (error) {
+          console.error("Local login failed", error);
           return false;
         }
-        return false;
       },
       hydrateFromServer: async () => {
+        const local = await loadLocalSnapshot().catch(() => null);
+        if (local) set(local);
         try {
           const response = await fetch("/api/bootstrap", { credentials: "include" });
-          if (!response.ok) return false;
+          if (!response.ok) return Boolean(local);
           const payload = (await response.json()) as Partial<AppState>;
           set({
             ...payload,
             isAuthed: true,
           });
+          await saveLocalSnapshot({
+            shopConfig: payload.shopConfig ?? defaultShopConfig,
+            categories: payload.categories ?? [],
+            items: payload.items ?? [],
+            customers: payload.customers ?? [],
+            suppliers: payload.suppliers ?? [],
+            saleBills: payload.saleBills ?? [],
+            purchaseBills: payload.purchaseBills ?? [],
+            returns: payload.returns ?? [],
+            khataTransactions: payload.khataTransactions ?? [],
+            notifications: payload.notifications ?? [],
+            rateHistory: payload.rateHistory ?? [],
+            aiSessions: payload.aiSessions ?? [],
+            stockAdjustments: payload.stockAdjustments ?? [],
+            categoryImages: payload.categoryImages ?? [],
+            inventoryMovements: payload.inventoryMovements ?? [],
+            auditLogs: payload.auditLogs ?? [],
+          });
           return true;
-        } catch {
-          return false;
+        } catch (error) {
+          console.error("Bootstrap failed; using local database", error);
+          return Boolean(local);
         }
       },
 
@@ -1998,16 +2031,37 @@ export const useApp = create<AppState>()(
   supplierBalance: (supplierId) =>
     computeBalance(get().khataTransactions, "supplier", supplierId),
     }),
-    {
-      name: "hardware_shop_storage_v1",
-      partialize: (state) => ({
-        isAuthed: state.isAuthed,
-      }),
-    }
-  )
 );
 
 if (typeof window !== "undefined") {
+  let localWriteQueue = Promise.resolve();
+  useApp.subscribe((state) => {
+    localWriteQueue = localWriteQueue
+      .then(() =>
+        saveLocalSnapshot({
+          shopConfig: state.shopConfig,
+          categories: state.categories,
+          items: state.items,
+          customers: state.customers,
+          suppliers: state.suppliers,
+          saleBills: state.saleBills,
+          purchaseBills: state.purchaseBills,
+          returns: state.returns,
+          khataTransactions: state.khataTransactions,
+          notifications: state.notifications,
+          rateHistory: state.rateHistory,
+          aiSessions: state.aiSessions,
+          stockAdjustments: state.stockAdjustments,
+          categoryImages: state.categoryImages,
+          inventoryMovements: state.inventoryMovements,
+          auditLogs: state.auditLogs,
+        })
+      )
+      .catch((error) => {
+        console.error("Local database write failed", error);
+      });
+  });
+  void useApp.getState().initializeLocalAuth();
   void fetch("/api/session", { credentials: "include" })
     .then((response) => response.json() as Promise<{ authenticated: boolean }>)
     .then((session) => {

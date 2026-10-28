@@ -32,6 +32,9 @@ export default function Home() {
 
   useEffect(() => {
     setMounted(true);
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker.register("/sw.js");
+    }
   }, []);
 
   if (!mounted) {
@@ -74,4 +77,3 @@ export default function Home() {
     </div>
   );
 }
-
