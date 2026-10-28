@@ -2,7 +2,13 @@ const CACHE = "hardware-shop-shell-v2";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/logo.svg", "/fonts/NotoNaskhArabic.ttf"];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(APP_SHELL)));
+  event.waitUntil(caches.open(CACHE).then(async (cache) => {
+    await cache.addAll(APP_SHELL);
+    const response = await fetch("/");
+    const html = await response.text();
+    const assets = [...html.matchAll(/(?:src|href)="([^"]+\/_next\/static\/[^"]+)"/g)].map((match) => match[1]);
+    await cache.addAll([...new Set(assets)]);
+  }));
   self.skipWaiting();
 });
 
