@@ -289,6 +289,7 @@ const defaultShopConfig: ShopConfig = {
   baseUnitDefault: "Piece",
   khataReminderThresholdDays: 7,
   khataReminderThresholdAmount: 1000,
+  language: "en",
 };
 
 // Per resolution #1 — client-generated UUID for idempotency

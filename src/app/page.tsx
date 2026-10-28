@@ -30,6 +30,7 @@ export default function Home() {
   const [mounted, setMounted] = useState(false);
   const isAuthed = useApp((s) => s.isAuthed);
   const screen = useApp((s) => s.screen);
+  const language = useApp((s) => s.shopConfig.language ?? "en");
 
   useEffect(() => {
     setMounted(true);
@@ -37,6 +38,12 @@ export default function Home() {
       void navigator.serviceWorker.register("/sw.js");
     }
   }, []);
+
+  useEffect(() => {
+    document.documentElement.lang = language;
+    document.documentElement.dir = language === "ur" ? "rtl" : "ltr";
+    document.documentElement.style.fontFamily = language === "ur" ? "Noto Naskh Arabic, var(--font-geist-sans)" : "var(--font-geist-sans)";
+  }, [language]);
 
   if (!mounted) {
     return (

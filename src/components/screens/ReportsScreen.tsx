@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { fmtRs } from "@/lib/store";
 import { getLocalReport, type LocalReportKind } from "@/lib/localReports";
+import { t } from "@/lib/i18n";
+import { useApp } from "@/lib/store";
 
 type Report = { kind: string; [key: string]: unknown };
 
@@ -13,6 +15,7 @@ export function ReportsScreen() {
   const [error, setError] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const language = useApp((state) => state.shopConfig.language ?? "en");
 
   useEffect(() => {
     let active = true;
@@ -38,12 +41,12 @@ export function ReportsScreen() {
         ))}
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <label className="text-xs font-bold text-slate-500">From<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm" /></label>
-        <label className="text-xs font-bold text-slate-500">To<input type="date" value={to} onChange={(event) => setTo(event.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm" /></label>
+        <label className="text-xs font-bold text-slate-500">{t("from", language)}<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm" /></label>
+        <label className="text-xs font-bold text-slate-500">{t("to", language)}<input type="date" value={to} onChange={(event) => setTo(event.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm" /></label>
       </div>
       <div className="flex justify-end gap-2">
-        <Button onClick={share} variant="outline">Share / PDF</Button>
-        <Button onClick={print}>Print</Button>
+        <Button onClick={share} variant="outline">{t("sharePdf", language)}</Button>
+        <Button onClick={print}>{t("print", language)}</Button>
       </div>
       {error && <p className="rounded-lg bg-rose-50 p-3 text-rose-700">{error}</p>}
       {report && (
